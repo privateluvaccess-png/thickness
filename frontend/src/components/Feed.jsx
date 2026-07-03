@@ -12,160 +12,148 @@ function extractUrl(text) {
   return match ? match[0] : null;
 }
 
+// Floating, draggable, dismissible sponsor bubble.
+// Never blocks the screen or scroll — user can drag it out of the way,
+// tap it to open the link, or dismiss it immediately with the ✕.
 function LinkOverlay({ url, onClose }) {
-  let domain = '';
-  try { domain = new URL(url).hostname.replace('www.', ''); } catch {}
+  const BUBBLE_SIZE = 76;
+  const MARGIN = 12;
 
-  const [canClose,  setCanClose]  = React.useState(false);
-  const [countdown, setCountdown] = React.useState(10);
-  const [tapped,    setTapped]    = React.useState(false);
-  const [shake,     setShake]     = React.useState(false);
+  const [pos, setPos] = React.useState(() => ({
+    x: typeof window !== 'undefined' ? window.innerWidth - BUBBLE_SIZE - MARGIN : MARGIN,
+    y: typeof window !== 'undefined' ? window.innerHeight - BUBBLE_SIZE - 140 : 140,
+  }));
+  const dragState = useRef({ dragging: false, startX: 0, startY: 0, origX: 0, origY: 0, moved: false });
 
-  // Lock body scroll while overlay is open
-  React.useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
-  }, []);
-
-  // Countdown
-  React.useEffect(() => {
-    const interval = setInterval(() => {
-      setCountdown(prev => {
-        if (prev <= 1) { clearInterval(interval); setCanClose(true); return 0; }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Shake loop
-  React.useEffect(() => {
-    const loop = setInterval(() => {
-      setShake(true);
-      setTimeout(() => setShake(false), 600);
-    }, 3000);
-    return () => clearInterval(loop);
-  }, []);
-
-  function handleBoxTap() {
-    setTapped(true);
-    setTimeout(() => { window.open(url, '_blank'); }, 320);
+  function clamp(x, y) {
+    const maxX = window.innerWidth - BUBBLE_SIZE - MARGIN;
+    const maxY = window.innerHeight - BUBBLE_SIZE - MARGIN;
+    return { x: Math.min(Math.max(x, MARGIN), maxX), y: Math.min(Math.max(y, MARGIN), maxY) };
   }
 
-  // Block scroll events from propagating through overlay
-  function blockScroll(e) { e.stopPropagation(); e.preventDefault(); }
+  function handlePointerDown(e) {
+    const point = e.touches ? e.touches[0] : e;
+    dragState.current = {
+      dragging: true,
+      moved: false,
+      startX: point.clientX,
+      startY: point.clientY,
+      origX: pos.x,
+      origY: pos.y,
+    };
+  }
+
+  function handlePointerMove(e) {
+    if (!dragState.current.dragging) return;
+    const point = e.touches ? e.touches[0] : e;
+    const dx = point.clientX - dragState.current.startX;
+    const dy = point.clientY - dragState.current.startY;
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) dragState.current.moved = true;
+    const next = clamp(dragState.current.origX + dx, dragState.current.origY + dy);
+    setPos(next);
+  }
+
+  function handlePointerUp() {
+    if (!dragState.current.dragging) return;
+    dragState.current.dragging = false;
+    // Snap to nearest edge, like a chat-head bubble
+    setPos(p => {
+      const goLeft = p.x + BUBBLE_SIZE / 2 < window.innerWidth / 2;
+      return clamp(goLeft ? MARGIN : window.innerWidth - BUBBLE_SIZE - MARGIN, p.y);
+    });
+  }
+
+  function handleTap() {
+    if (dragState.current.moved) return; // was a drag, not a tap
+    window.open(url, '_blank');
+  }
+
+  // Keep bubble on screen if the viewport resizes (e.g. keyboard/orientation)
+  React.useEffect(() => {
+    function onResize() { setPos(p => clamp(p.x, p.y)); }
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   return ReactDOM.createPortal(
     <>
       <style>{`
         @keyframes giftFloat {
           0%, 100% { transform: translateY(0px); }
-          50%       { transform: translateY(-10px); }
+          50%       { transform: translateY(-6px); }
         }
-        @keyframes giftShake {
-          0%,100% { transform: rotate(0deg) translateY(0px); }
-          20%     { transform: rotate(-4deg) translateY(-2px); }
-          40%     { transform: rotate(4deg) translateY(-4px); }
-          60%     { transform: rotate(-3deg) translateY(-2px); }
-          80%     { transform: rotate(3deg) translateY(-1px); }
+        @keyframes bubbleIn {
+          from { opacity: 0; transform: scale(0.6); }
+          to   { opacity: 1; transform: scale(1); }
         }
-        @keyframes glowPulse {
-          0%, 100% { box-shadow: 0 0 40px 10px rgba(220,38,38,0.35), 0 0 80px 20px rgba(220,38,38,0.15); }
-          50%       { box-shadow: 0 0 60px 20px rgba(220,38,38,0.55), 0 0 120px 40px rgba(220,38,38,0.25); }
-        }
-        @keyframes tapFlash {
-          0%   { opacity: 1; transform: scale(1); }
-          50%  { opacity: 0.6; transform: scale(1.08); }
-          100% { opacity: 1; transform: scale(1); }
-        }
-        @keyframes fadeInUp {
-          from { opacity: 0; transform: translateY(24px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes ringPulse {
-          0%,100% { transform: scale(1); opacity: 0.6; }
-          50%     { transform: scale(1.18); opacity: 0; }
-        }
-        .gift-float { animation: giftFloat 3s ease-in-out infinite; }
-        .gift-shake { animation: giftShake 0.6s ease-in-out; }
-        .gift-tap   { animation: tapFlash 0.32s ease-in-out; }
-        .glow-ring  { animation: glowPulse 2s ease-in-out infinite; }
-        .overlay-in { animation: fadeInUp 0.4s ease-out both; }
-        .ring-pulse { animation: ringPulse 1.8s ease-out infinite; }
+        .gift-float { animation: giftFloat 2.6s ease-in-out infinite; }
+        .bubble-in  { animation: bubbleIn 0.25s ease-out both; }
       `}</style>
 
-      {/* Full-screen locked backdrop */}
       <div
-        onTouchMove={blockScroll}
-        onWheel={blockScroll}
+        className="bubble-in"
+        onMouseDown={handlePointerDown}
+        onMouseMove={handlePointerMove}
+        onMouseUp={handlePointerUp}
+        onMouseLeave={handlePointerUp}
+        onTouchStart={handlePointerDown}
+        onTouchMove={handlePointerMove}
+        onTouchEnd={handlePointerUp}
         style={{
           position: 'fixed',
-          inset: 0,
+          left: pos.x,
+          top: pos.y,
           zIndex: 9999,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: 'radial-gradient(ellipse at center, rgba(30,0,0,0.95) 0%, rgba(0,0,0,0.98) 100%)',
-          backdropFilter: 'blur(6px)',
+          width: BUBBLE_SIZE,
+          height: BUBBLE_SIZE,
           touchAction: 'none',
-          overflow: 'hidden',
           userSelect: 'none',
+          cursor: 'grab',
         }}
       >
-        <div className="overlay-in flex flex-col items-center gap-6 px-6 w-full" style={{ maxWidth: 340 }}>
+        {/* Close / skip — always available immediately, no countdown */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onClose(); }}
+          aria-label="Dismiss ad"
+          style={{
+            position: 'absolute', top: -8, right: -8, zIndex: 2,
+            width: 22, height: 22, borderRadius: '50%',
+            background: '#1f1f1f', border: '1px solid rgba(255,255,255,0.25)',
+            color: '#e5e7eb', fontSize: 12, fontWeight: 700,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', lineHeight: 1,
+          }}
+        >
+          ✕
+        </button>
 
-          {/* Sponsor label */}
-          <div style={{ color: '#b45309', fontSize: 11, letterSpacing: '0.18em', fontWeight: 700, textTransform: 'uppercase', opacity: 0.8 }}>
-            Sponsored
-          </div>
-
-          {/* Box + rings */}
-          <div style={{ position: 'relative', width: 240, height: 240, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div className="ring-pulse" style={{ position: 'absolute', width: 230, height: 230, borderRadius: '50%', border: '2px solid rgba(220,38,38,0.4)', animationDelay: '0s' }} />
-            <div className="ring-pulse" style={{ position: 'absolute', width: 200, height: 200, borderRadius: '50%', border: '2px solid rgba(220,38,38,0.25)', animationDelay: '0.6s' }} />
-
-            <button
-              onClick={handleBoxTap}
-              className={`glow-ring ${tapped ? 'gift-tap' : shake ? 'gift-shake' : 'gift-float'}`}
-              style={{ position: 'relative', zIndex: 1, width: 190, height: 190, background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', borderRadius: 16 }}
-              aria-label="Open sponsored link"
-            >
-              <img
-                src={giftBox}
-                alt="Tap to open"
-                style={{ width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none', borderRadius: 16 }}
-                draggable={false}
-              />
-            </button>
-          </div>
-
-          {/* CTA */}
-          <div style={{ textAlign: 'center' }}>
-            <p style={{ color: '#f5f5f5', fontSize: 18, fontWeight: 800, letterSpacing: '-0.01em', margin: 0 }}>
-              Tap the box to open
-            </p>
-            <p style={{ color: '#9ca3af', fontSize: 13, marginTop: 4 }}>
-              {domain}
-            </p>
-          </div>
-
-          {/* Skip */}
-          {canClose ? (
-            <button
-              onClick={onClose}
-              style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: '#9ca3af', fontSize: 12, fontWeight: 600, padding: '8px 24px', borderRadius: 999, cursor: 'pointer', letterSpacing: '0.05em' }}
-            >
-              Skip ad ✕
-            </button>
-          ) : (
-            <div style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#6b7280', fontSize: 12, fontWeight: 600, padding: '8px 24px', borderRadius: 999, letterSpacing: '0.05em' }}>
-              Skip in {countdown}s
-            </div>
-          )}
-
-        </div>
+        <button
+          onClick={handleTap}
+          className="gift-float"
+          aria-label="Open sponsored link"
+          style={{
+            width: '100%', height: '100%', borderRadius: 18,
+            background: '#151515', border: '1px solid rgba(220,38,38,0.5)',
+            boxShadow: '0 4px 18px rgba(0,0,0,0.5), 0 0 20px rgba(220,38,38,0.25)',
+            padding: 4, cursor: 'pointer', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', position: 'relative',
+          }}
+        >
+          <img
+            src={giftBox}
+            alt="Sponsored"
+            style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 14, pointerEvents: 'none' }}
+            draggable={false}
+          />
+          <span style={{
+            position: 'absolute', bottom: -6, left: '50%', transform: 'translateX(-50%)',
+            fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: '#b45309',
+            background: '#0a0a0a', padding: '1px 5px', borderRadius: 6, whiteSpace: 'nowrap',
+            border: '1px solid rgba(180,83,9,0.4)',
+          }}>
+            SPONSORED
+          </span>
+        </button>
       </div>
     </>,
     document.body
