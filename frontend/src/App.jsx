@@ -174,6 +174,24 @@ export default function App() {
   const [error, setError]           = useState(null);
   const [devBoostUnlocked, setDevBoost] = useState(false);
 
+  // Start the in-app interstitial ad session once, globally.
+  // This replaces the old per-tap popup: the SDK now manages its own
+  // schedule (frequency / capping / interval / timeout) automatically.
+  useEffect(() => {
+    if (typeof show_11218209 === 'function') {
+      show_11218209({
+        type: 'inApp',
+        inAppSettings: {
+          frequency: 2,
+          capping: 0.1,
+          interval: 30,
+          timeout: 5,
+          everyPage: false,
+        },
+      }).catch(() => {});
+    }
+  }, []);
+
   useEffect(() => {
     async function init() {
       try {
