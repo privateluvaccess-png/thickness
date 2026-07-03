@@ -17,6 +17,7 @@ export default function PostCard({ post, isPremium, userId, onLockTap, isAdmin, 
   const [mediaError, setMediaError] = useState(false);
   const [deleting, setDeleting]     = useState(false);
   const [muted, setMuted]           = useState(true);
+  const [shouldLoad, setShouldLoad] = useState(false);
   const videoElRef = useRef(null);
   const wrapperRef  = useRef(null);
 
@@ -43,11 +44,35 @@ export default function PostCard({ post, isPremium, userId, onLockTap, isAdmin, 
   // no per-tap popup trigger needed here anymore.
   function handleMediaTap() {}
 
-  // TikTok-style behavior: video starts playing the instant it's mostly
-  // in view (muted, so browsers allow it without a tap), and pauses the
-  // moment it scrolls out — no waiting for a manual play tap.
+  // Only start fetching/downloading a video once it's about to come into
+  // view (roughly one screen away) — NOT the instant the feed renders.
+  // Every video hitting the backend/Telegram at once was the cause of the
+  // slow, stuck loading.
   useEffect(() => {
     if (post.type !== 'video' || isLocked) return;
+    const el = wrapperRef.current;
+    if (!el || shouldLoad) return;
+
+    const loadObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            setShouldLoad(true);
+            loadObserver.disconnect();
+          }
+        });
+      },
+      { rootMargin: '150% 0px' }
+    );
+    loadObserver.observe(el);
+    return () => loadObserver.disconnect();
+  }, [post.type, isLocked, shouldLoad]);
+
+  // TikTok-style behavior: once loaded, the video plays the instant it's
+  // mostly in view (muted, so browsers allow it without a tap), and pauses
+  // the moment it scrolls out.
+  useEffect(() => {
+    if (post.type !== 'video' || isLocked || !shouldLoad) return;
     const el = wrapperRef.current;
     const video = videoElRef.current;
     if (!el || !video) return;
@@ -66,7 +91,7 @@ export default function PostCard({ post, isPremium, userId, onLockTap, isAdmin, 
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [post.type, isLocked, mediaUrl]);
+  }, [post.type, isLocked, shouldLoad, mediaUrl]);
 
   function renderMedia() {
     if (isLocked) {
@@ -89,27 +114,34 @@ export default function PostCard({ post, isPremium, userId, onLockTap, isAdmin, 
 
     if (post.type === 'video') {
       return (
-        <div ref={wrapperRef} className="relative w-full">
-          <video
-            ref={videoElRef}
-            src={mediaUrl}
-            muted={muted}
-            autoPlay
-            loop
-            playsInline
-            webkit-playsinline="true"
-            preload="auto"
-            className="w-full max-h-[400px] object-contain"
-            onError={() => setMediaError(true)}
-            onPlaying={handleMediaTap}
-          />
-          <button
-            onClick={(e) => { e.stopPropagation(); setMuted(m => !m); }}
-            aria-label={muted ? 'Unmute' : 'Mute'}
-            className="absolute bottom-2 right-2 w-8 h-8 rounded-full bg-black/60 text-white text-sm flex items-center justify-center"
-          >
-            {muted ? '🔇' : '🔊'}
-          </button>
+        <div ref={wrapperRef} className="relative w-full" style={{ minHeight: 220 }}>
+          {shouldLoad ? (
+            <>
+              <video
+                ref={videoElRef}
+                src={mediaUrl}
+                muted={muted}
+                loop
+                playsInline
+                webkit-playsinline="true"
+                preload="auto"
+                className="w-full max-h-[400px] object-contain"
+                onError={() => setMediaError(true)}
+                onPlaying={handleMediaTap}
+              />
+              <button
+                onClick={(e) => { e.stopPropagation(); setMuted(m => !m); }}
+                aria-label={muted ? 'Unmute' : 'Mute'}
+                className="absolute bottom-2 right-2 w-8 h-8 rounded-full bg-black/60 text-white text-sm flex items-center justify-center"
+              >
+                {muted ? '🔇' : '🔊'}
+              </button>
+            </>
+          ) : (
+            <div className="w-full h-[220px] flex items-center justify-center text-gray-600 text-xs">
+              ▶
+            </div>
+          )}
         </div>
       );
     }
