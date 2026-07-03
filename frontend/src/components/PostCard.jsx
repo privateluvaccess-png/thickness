@@ -16,6 +16,9 @@ export default function PostCard({ post, isPremium, userId, onLockTap, isAdmin, 
   const [mediaUrl, setMediaUrl]     = useState(null);
   const [mediaError, setMediaError] = useState(false);
   const [deleting, setDeleting]     = useState(false);
+  const [muted, setMuted]           = useState(true);
+  const videoElRef = useRef(null);
+  const wrapperRef  = useRef(null);
 
   useEffect(() => {
     if (!isLocked && post.file_id) {
@@ -35,26 +38,35 @@ export default function PostCard({ post, isPremium, userId, onLockTap, isAdmin, 
     }
   }
 
-  const AD_COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours
-  const adFiredRef = useRef(false);
+  // Ad delivery is now handled globally by the inApp interstitial
+  // (see App.jsx), which manages its own frequency/capping/interval —
+  // no per-tap popup trigger needed here anymore.
+  function handleMediaTap() {}
 
-  function handleMediaTap() {
-    const key = `ad_last_click_${userId}`;
-    const last = localStorage.getItem(key);
-    const now = Date.now();
+  // TikTok-style behavior: video starts playing the instant it's mostly
+  // in view (muted, so browsers allow it without a tap), and pauses the
+  // moment it scrolls out — no waiting for a manual play tap.
+  useEffect(() => {
+    if (post.type !== 'video' || isLocked) return;
+    const el = wrapperRef.current;
+    const video = videoElRef.current;
+    if (!el || !video) return;
 
-    // Respect cooldown — only fire once every 2 hours per user
-    if (adFiredRef.current) return;
-    if (last && now - parseInt(last) < AD_COOLDOWN_MS) return;
-
-    adFiredRef.current = true;
-    localStorage.setItem(key, String(now));
-
-    // Fire Monetag popup — takes user directly to the offer page
-    if (typeof show_11218209 === 'function') {
-      show_11218209('pop').catch(() => {});
-    }
-  }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
+            video.play().catch(() => {}); // ignore autoplay-blocked errors
+          } else {
+            video.pause();
+          }
+        });
+      },
+      { threshold: [0, 0.6, 1] }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [post.type, isLocked, mediaUrl]);
 
   function renderMedia() {
     if (isLocked) {
@@ -77,15 +89,27 @@ export default function PostCard({ post, isPremium, userId, onLockTap, isAdmin, 
 
     if (post.type === 'video') {
       return (
-        <div className="relative w-full">
+        <div ref={wrapperRef} className="relative w-full">
           <video
+            ref={videoElRef}
             src={mediaUrl}
-            controls
+            muted={muted}
+            autoPlay
+            loop
             playsInline
+            webkit-playsinline="true"
+            preload="auto"
             className="w-full max-h-[400px] object-contain"
             onError={() => setMediaError(true)}
-            onPlay={handleMediaTap}
+            onPlaying={handleMediaTap}
           />
+          <button
+            onClick={(e) => { e.stopPropagation(); setMuted(m => !m); }}
+            aria-label={muted ? 'Unmute' : 'Mute'}
+            className="absolute bottom-2 right-2 w-8 h-8 rounded-full bg-black/60 text-white text-sm flex items-center justify-center"
+          >
+            {muted ? '🔇' : '🔊'}
+          </button>
         </div>
       );
     }
