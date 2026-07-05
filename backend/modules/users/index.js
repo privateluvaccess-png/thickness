@@ -47,11 +47,22 @@ async function getOrCreateUser(telegramUser) {
 
   const { data: newUser } = await supabase
     .from('users')
-    .insert({ telegram_id: id, username, first_name })
+    .insert({ telegram_id: id, username, first_name, notifications_enabled: true })
     .select()
     .single();
 
   return newUser;
+}
+
+async function setNotificationsEnabled(telegramId, enabled) {
+  const { data } = await supabase
+    .from('users')
+    .update({ notifications_enabled: enabled })
+    .eq('telegram_id', telegramId)
+    .select()
+    .single();
+
+  return data;
 }
 
 async function getUserById(telegramId) {
@@ -64,4 +75,4 @@ async function getUserById(telegramId) {
   return data;
 }
 
-module.exports = { getOrCreateUser, getUserById, verifyTelegramInitData };
+module.exports = { getOrCreateUser, getUserById, verifyTelegramInitData, setNotificationsEnabled };
