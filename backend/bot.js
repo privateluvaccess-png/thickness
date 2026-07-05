@@ -1,8 +1,9 @@
 const { Telegraf } = require('telegraf');
-const { getOrCreateUser } = require('./modules/users');
+const { getOrCreateUser, setNotificationsEnabled } = require('./modules/users');
 const { syncPost, deletePost } = require('./modules/posts');
 const { setActiveLink } = require('./modules/link');
 const { fulfillPayment } = require('./modules/payments');
+const { broadcastNewPost } = require('./modules/broadcast');
 const { FREE_CHANNEL_ID, PREMIUM_CHANNEL_ID } = require('./config/channels');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -44,6 +45,23 @@ bot.start(async (ctx) => {
   );
 });
 
+// ── Notification opt-out/opt-in ───────────────────────────────────────────────
+bot.command('notifications', async (ctx) => {
+  const arg = ctx.message.text.split(' ')[1]?.toLowerCase();
+
+  if (arg === 'off') {
+    await setNotificationsEnabled(ctx.from.id, false);
+    return ctx.reply('🔕 New content alerts are now off. Send /notifications on to turn them back on.');
+  }
+
+  if (arg === 'on') {
+    await setNotificationsEnabled(ctx.from.id, true);
+    return ctx.reply('🔔 New content alerts are on. You\'ll get a message whenever new content drops.');
+  }
+
+  return ctx.reply('Use /notifications on or /notifications off to control new-content alerts.');
+});
+
 // ── Channel post listener ─────────────────────────────────────────────────────
 bot.on('channel_post', async (ctx) => {
   const message = ctx.channelPost;
@@ -63,7 +81,14 @@ bot.on('channel_post', async (ctx) => {
   }
 
   // Otherwise sync as a normal post
-  await syncPost(message, tier);
+  const post = await syncPost(message, tier);
+
+  // Let every bot user know new content just went up
+  if (post) {
+    broadcastNewPost(bot, post, tier).catch((err) =>
+      console.error('broadcastNewPost error:', err.message)
+    );
+  }
 });
 
 // ── Channel post deleted ──────────────────────────────────────────────────────
