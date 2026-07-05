@@ -11,10 +11,10 @@ module.exports = {
     stars: 1000,
     days: 60,
   },
-  PREMIUM_3_MONTHS: {
-    key: 'premium_3_months',
-    label: 'Premium 3 Months',
+  PREMIUM_6_MONTHS: {
+    key: 'premium_6_months',
+    label: 'Premium 6 Months',
     stars: 2500,
-    days: 90,
+    days: 180,
   },
 };
