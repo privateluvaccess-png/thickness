@@ -5,7 +5,7 @@ import { createInvoice } from '../api';
 const PRODUCTS = [
   { key: 'premium_1_month',  label: '1 Month',  stars: 500,  badge: null },
   { key: 'premium_2_months', label: '2 Months', stars: 1000, badge: null },
-  { key: 'premium_3_months', label: '3 Months', stars: 2500, badge: '🔥 Best Offer' },
+  { key: 'premium_6_months', label: '6 Months', stars: 2500, badge: '🔥 Best Offer' },
 ];
 
 export default function PremiumGate({ telegramId, onUnlocked, onBack }) {
