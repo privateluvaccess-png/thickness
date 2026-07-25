@@ -160,6 +160,53 @@ function LinkOverlay({ url, onClose }) {
   );
 }
 
+const POSTS_PER_PAGE = 5;
+const MAX_VISIBLE_PAGES = 10;
+
+// Pagination bar: numbered page buttons (capped at 10 visible, sliding as you
+// page through) + a next-page chevron. Matches the "1 / 2 / >" style —
+// active page is filled dark, others outlined.
+function Pagination({ currentPage, totalPages, onPageChange }) {
+  if (totalPages <= 1) return null;
+
+  // Slide a window of up to MAX_VISIBLE_PAGES page numbers, keeping the
+  // current page inside it, without ever spilling past totalPages.
+  let windowStart = Math.max(1, currentPage - Math.floor(MAX_VISIBLE_PAGES / 2));
+  let windowEnd = Math.min(totalPages, windowStart + MAX_VISIBLE_PAGES - 1);
+  windowStart = Math.max(1, windowEnd - MAX_VISIBLE_PAGES + 1);
+
+  const pages = [];
+  for (let i = windowStart; i <= windowEnd; i++) pages.push(i);
+
+  return (
+    <div className="flex items-center justify-center gap-2 py-4 flex-wrap">
+      {pages.map(page => (
+        <button
+          key={page}
+          onClick={() => onPageChange(page)}
+          className={`w-10 h-10 rounded-md flex items-center justify-center text-sm font-semibold transition ${
+            page === currentPage
+              ? 'bg-gray-700 text-white'
+              : 'bg-transparent text-gray-300 border border-gray-600'
+          }`}
+        >
+          {page}
+        </button>
+      ))}
+      <button
+        onClick={() => onPageChange(Math.min(currentPage + 1, totalPages))}
+        disabled={currentPage === totalPages}
+        aria-label="Next page"
+        className="w-10 h-10 flex items-center justify-center text-gray-300 disabled:text-gray-700 disabled:cursor-not-allowed"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="9 18 15 12 9 6" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
 export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, adminSecret, navigateToPostId, onNavigated }) {
   const { t } = useLanguage();
   const [freePosts,    setFreePosts]    = useState([]);
@@ -168,6 +215,7 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, admin
   const [showGate,     setShowGate]     = useState(false);
   const [activeTab,    setActiveTab]    = useState('free');
   const [overlayUrl,   setOverlayUrl]   = useState(null);
+  const [currentPage,  setCurrentPage]  = useState(1);
   const postRefs = useRef({});
   const scrollRef = useRef(null);
 
@@ -194,7 +242,12 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, admin
     if (!navigateToPostId) return;
     const allPosts = [...freePosts, ...premiumPosts];
     const target = allPosts.find(p => p.id === navigateToPostId);
-    if (target) setActiveTab(target.tier === 'premium' ? 'premium' : 'free');
+    if (target) {
+      const tierPosts = target.tier === 'premium' ? premiumPosts : freePosts;
+      const idx = tierPosts.findIndex(p => p.id === navigateToPostId);
+      setActiveTab(target.tier === 'premium' ? 'premium' : 'free');
+      setCurrentPage(Math.floor(idx / POSTS_PER_PAGE) + 1);
+    }
     setTimeout(() => {
       const el = postRefs.current[navigateToPostId];
       if (el) {
@@ -223,6 +276,16 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, admin
     setPremiumPosts(prev => prev.filter(p => p.id !== postId));
   }
 
+  // Reset to page 1 whenever the visible tab changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab]);
+
+  function handlePageChange(page) {
+    setCurrentPage(page);
+    scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
   if (showGate) {
     return (
       <PremiumGate
@@ -234,6 +297,9 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, admin
   }
 
   const displayed = activeTab === 'free' ? freePosts : premiumPosts;
+  const totalPages = Math.max(1, Math.ceil(displayed.length / POSTS_PER_PAGE));
+  const pageStart = (currentPage - 1) * POSTS_PER_PAGE;
+  const pagePosts = displayed.slice(pageStart, pageStart + POSTS_PER_PAGE);
 
   return (
     <div className="flex flex-col h-full">
@@ -260,7 +326,7 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, admin
         <p className="text-center text-gray-500 mt-10">{t('noPosts')}</p>
       ) : (
         <div ref={scrollRef} className="overflow-y-auto pb-20">
-          {displayed.map(post => (
+          {pagePosts.map(post => (
             <PostCard
               key={post.id}
               post={post}
@@ -274,6 +340,11 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, admin
               adUrl={overlayUrl}
             />
           ))}
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+          />
         </div>
       )}
     </div>
