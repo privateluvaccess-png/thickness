@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import BookmarksSheet from './BookmarksSheet';
 
 const BACKEND = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
-const DEV_BOOST_SECRET = import.meta.env.VITE_DEV_BOOST_SECRET || import.meta.env.VITE_DEV_PASSWORD || 'devboost123';
 
 export default function ProfileButton({ user, isPremium, expiresAt, devBoostUnlocked, onDevBoost, onNavigate }) {
   const [open,          setOpen]          = useState(false);
   const [showBookmarks, setShowBookmarks] = useState(false);
   const [boosting,      setBoosting]      = useState(false);
   const [boostMsg,      setBoostMsg]      = useState('');
+  const [showSecretPrompt, setShowSecretPrompt] = useState(false);
+  const [boostSecret,   setBoostSecret]   = useState('');
 
   const initials  = user?.first_name?.slice(0, 1).toUpperCase() || '?';
   const avatarUrl = user?.photo_url || null;
@@ -22,15 +23,18 @@ export default function ProfileButton({ user, isPremium, expiresAt, devBoostUnlo
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           telegram_id: user?.telegram_id,
-          secret: DEV_BOOST_SECRET,
+          secret: boostSecret,
         }),
       });
       const json = await res.json();
       if (json.success) {
         setBoostMsg('✅ Premium unlocked for 24h!');
+        setShowSecretPrompt(false);
+        setBoostSecret('');
         onDevBoost?.();
       } else {
         setBoostMsg('❌ ' + (json.error || 'Failed'));
+        setBoostSecret('');
       }
     } catch (err) {
       setBoostMsg('❌ ' + err.message);
@@ -103,13 +107,33 @@ export default function ProfileButton({ user, isPremium, expiresAt, devBoostUnlo
             {/* DevBoost — only visible after secret logo tap */}
             {devBoostUnlocked && !isPremium && (
               <div className="flex flex-col gap-2">
-                <button
-                  onClick={handleDevBoost}
-                  disabled={boosting}
-                  className="w-full py-3 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  {boosting ? '⏳ Activating...' : '⚡ DevBoost — Unlock Premium (24h)'}
-                </button>
+                {!showSecretPrompt ? (
+                  <button
+                    onClick={() => { setShowSecretPrompt(true); setBoostMsg(''); }}
+                    className="w-full py-3 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 text-sm font-semibold flex items-center justify-center gap-2"
+                  >
+                    ⚡ DevBoost — Unlock Premium (24h)
+                  </button>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    <input
+                      type="password"
+                      autoFocus
+                      value={boostSecret}
+                      onChange={e => setBoostSecret(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleDevBoost()}
+                      placeholder="Enter DevBoost secret"
+                      className="w-full py-3 px-4 rounded-xl bg-zinc-800 text-white text-sm border border-amber-500/40 focus:outline-none"
+                    />
+                    <button
+                      onClick={handleDevBoost}
+                      disabled={boosting || !boostSecret}
+                      className="w-full py-3 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 text-sm font-semibold disabled:opacity-50"
+                    >
+                      {boosting ? '⏳ Activating...' : 'Confirm'}
+                    </button>
+                  </div>
+                )}
                 {boostMsg && (
                   <p className="text-xs text-center text-gray-400">{boostMsg}</p>
                 )}
