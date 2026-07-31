@@ -1,7 +1,40 @@
 const supabase = require('../../supabase');
+const { uploadToR2 } = require('../r2');
+
+const TELEGRAM_API_ROOT      = process.env.TELEGRAM_API_ROOT || 'https://api.telegram.org';
+const TELEGRAM_FILE_API_ROOT = process.env.TELEGRAM_FILE_API_ROOT || 'https://api.telegram.org';
 
 function randomBetween(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+/**
+ * Downloads a file from Telegram by file_id and uploads it to R2.
+ * Returns the public R2 URL, or null if anything goes wrong (in which
+ * case we just fall back to serving via the old Telegram proxy).
+ */
+async function mirrorToR2(fileId, type) {
+  try {
+    const token = process.env.BOT_TOKEN;
+
+    const infoRes  = await fetch(`${TELEGRAM_API_ROOT}/bot${token}/getFile?file_id=${fileId}`);
+    const infoJson = await infoRes.json();
+    const filePath = infoJson?.result?.file_path;
+    if (!filePath) return null;
+
+    const fileRes = await fetch(`${TELEGRAM_FILE_API_ROOT}/file/bot${token}/${filePath}`);
+    if (!fileRes.ok) return null;
+
+    const buffer      = Buffer.from(await fileRes.arrayBuffer());
+    const contentType = fileRes.headers.get('content-type') || 'application/octet-stream';
+    const ext          = filePath.split('.').pop();
+    const key           = `${type}s/${fileId}.${ext}`;
+
+    return await uploadToR2(buffer, key, contentType);
+  } catch (err) {
+    console.error('mirrorToR2 error:', err.message);
+    return null;
+  }
 }
 
 async function syncPost(message, tier) {
@@ -19,6 +52,12 @@ async function syncPost(message, tier) {
     ? 'document'
     : 'text';
 
+  // Put the actual bytes in R2 right away, so the app never has to
+  // stream them through Render. If this fails for any reason (R2 down,
+  // file too big, etc.) media_url just stays null and the app quietly
+  // falls back to the old Telegram-proxy route for this post.
+  const mediaUrl = fileId ? await mirrorToR2(fileId, type) : null;
+
   const { data } = await supabase
     .from('posts')
     .insert({
@@ -26,6 +65,7 @@ async function syncPost(message, tier) {
       tier,
       type,
       file_id: fileId,
+      media_url: mediaUrl,
       caption: message.caption || message.text || null,
       seed_likes:     randomBetween(50, 500),
       seed_comments:  randomBetween(5, 80),
