@@ -11,7 +11,7 @@ function extractUrl(text) {
   return match ? match[0] : null;
 }
 
-export default function PostCard({ post, isPremium, userId, onLockTap, isAdmin, adminSecret, onDeleted, postRef, adUrl }) {
+export default function PostCard({ post, isPremium, userId, onLockTap, isAdmin, onDeleted, postRef, adUrl }) {
   const isLocked = post.tier === 'premium' && !isPremium;
   const [mediaUrl, setMediaUrl]     = useState(null);
   const [mediaError, setMediaError] = useState(false);
@@ -22,19 +22,23 @@ export default function PostCard({ post, isPremium, userId, onLockTap, isAdmin, 
   const wrapperRef  = useRef(null);
 
   useEffect(() => {
-    if (!isLocked && post.file_id) {
-      setMediaUrl(`${BACKEND}/api/posts/media/${post.file_id}`);
+    if (isLocked) return;
+    if (post.media_url) {
+      setMediaUrl(post.media_url);            // new posts: served straight from R2
+    } else if (post.file_id) {
+      setMediaUrl(`${BACKEND}/api/posts/media/${post.file_id}`); // old posts: old proxy
     }
-  }, [post.file_id, isLocked]);
+  }, [post.media_url, post.file_id, isLocked]);
 
   async function handleDelete() {
-    if (!window.confirm('Delete this post?')) return;
+    const secret = window.prompt('Enter admin secret to delete this post:');
+    if (!secret) return;
     setDeleting(true);
     try {
-      await deletePost(post.id, adminSecret);
+      await deletePost(post.id, secret);
       onDeleted?.(post.id);
     } catch (err) {
-      alert('Failed to delete post.');
+      alert(err?.response?.data?.error || 'Failed to delete post.');
       setDeleting(false);
     }
   }
