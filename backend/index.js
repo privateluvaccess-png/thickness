@@ -48,6 +48,7 @@ app.use('/api/comments',      require('./api/routes/comments'));
 app.use('/api/bookmarks',     require('./api/routes/bookmarks'));
 app.use('/api/notifications', require('./api/routes/notifications'));
 app.use('/api/link',          require('./api/routes/link'));
+app.use('/api/admin',         require('./api/routes/admin'));
 
 // Inject bot into payments module
 paymentsModule.setBot(bot);
