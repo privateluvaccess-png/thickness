@@ -101,23 +101,27 @@ async function mirrorToR2(fileId, type) {
 }
 
 // Visit this URL once in a browser (with your admin secret) to migrate
-// every existing post's media into R2. Safe to run more than once —
-// it only touches posts that don't already have a media_url.
-// GET /api/admin/backfill-r2?secret=YOUR_ADMIN_SECRET
+// existing posts' media into R2. Processes a small batch at a time to
+// avoid request timeouts — keep re-visiting the same URL until it
+// returns "remaining": 0.
+// GET /api/admin/backfill-r2?secret=YOUR_ADMIN_SECRET&limit=5
 router.get('/backfill-r2', async (req, res) => {
   if (req.query.secret !== process.env.ADMIN_SECRET) {
     return res.status(403).json({ error: 'Invalid secret' });
   }
 
-  const { data: posts, error } = await supabase
+  const limit = Math.min(parseInt(req.query.limit) || 5, 20);
+
+  const { data: posts, error, count } = await supabase
     .from('posts')
-    .select('id, file_id, type')
+    .select('id, file_id, type', { count: 'exact' })
     .is('media_url', null)
-    .not('file_id', 'is', null);
+    .not('file_id', 'is', null)
+    .limit(limit);
 
   if (error) return res.status(500).json({ error: error.message });
 
-  const results = { total: posts.length, migrated: 0, skipped: 0, failed: 0, details: [] };
+  const results = { batchSize: posts.length, remaining: Math.max((count || 0) - posts.length, 0), migrated: 0, skipped: 0, failed: 0, details: [] };
 
   for (const post of posts) {
     try {
@@ -134,7 +138,6 @@ router.get('/backfill-r2', async (req, res) => {
       results.failed++;
       results.details.push(`❌ Failed ${post.id}: ${err.message}`);
     }
-    await new Promise(r => setTimeout(r, 250));
   }
 
   res.json(results);
