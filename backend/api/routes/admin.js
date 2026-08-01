@@ -2,6 +2,9 @@ const router = require('express').Router();
 const supabase = require('../../supabase');
 const { uploadToR2 } = require('../../modules/r2');
 
+const TELEGRAM_API_ROOT      = process.env.TELEGRAM_API_ROOT || 'https://api.telegram.org';
+const TELEGRAM_FILE_API_ROOT = process.env.TELEGRAM_FILE_API_ROOT || 'https://api.telegram.org';
+
 // Visit this to test whether R2 credentials/config actually work.
 // Uploads a tiny 1-byte test file and reports back exactly what
 // happened — success or the real error message from AWS SDK/R2.
@@ -32,8 +35,52 @@ router.get('/test-r2', async (req, res) => {
   }
 });
 
-const TELEGRAM_API_ROOT      = process.env.TELEGRAM_API_ROOT || 'https://api.telegram.org';
-const TELEGRAM_FILE_API_ROOT = process.env.TELEGRAM_FILE_API_ROOT || 'https://api.telegram.org';
+// Traces the exact Telegram-fetch step for a real post, to find where
+// it's failing before even reaching R2.
+// GET /api/admin/test-telegram-fetch?secret=YOUR_ADMIN_SECRET&file_id=SOME_FILE_ID
+router.get('/test-telegram-fetch', async (req, res) => {
+  if (req.query.secret !== process.env.ADMIN_SECRET) {
+    return res.status(403).json({ error: 'Invalid secret' });
+  }
+
+  const fileId = req.query.file_id;
+  if (!fileId) return res.status(400).json({ error: 'Provide ?file_id=... from a real post' });
+
+  const diagnostics = {
+    TELEGRAM_API_ROOT:      process.env.TELEGRAM_API_ROOT || '(default: api.telegram.org)',
+    TELEGRAM_FILE_API_ROOT: process.env.TELEGRAM_FILE_API_ROOT || '(default: api.telegram.org)',
+    BOT_TOKEN:              process.env.BOT_TOKEN ? 'set (' + process.env.BOT_TOKEN.length + ' chars)' : 'MISSING',
+  };
+
+  try {
+    const token = process.env.BOT_TOKEN;
+    const getFileUrl = `${process.env.TELEGRAM_API_ROOT || 'https://api.telegram.org'}/bot${token}/getFile?file_id=${fileId}`;
+    const infoRes  = await fetch(getFileUrl);
+    const infoJson = await infoRes.json();
+
+    diagnostics.getFileStatus = infoRes.status;
+    diagnostics.getFileResponse = infoJson;
+
+    const filePath = infoJson?.result?.file_path;
+    if (!filePath) {
+      return res.json({ success: false, stage: 'getFile', diagnostics });
+    }
+
+    const fileUrl = `${process.env.TELEGRAM_FILE_API_ROOT || 'https://api.telegram.org'}/file/bot${token}/${filePath}`;
+    const fileRes = await fetch(fileUrl);
+    diagnostics.fileDownloadStatus = fileRes.status;
+    diagnostics.fileDownloadOk = fileRes.ok;
+
+    if (!fileRes.ok) {
+      return res.json({ success: false, stage: 'fileDownload', diagnostics });
+    }
+
+    return res.json({ success: true, diagnostics });
+  } catch (err) {
+    return res.json({ success: false, stage: 'exception', errorMessage: err.message, diagnostics });
+  }
+});
+
 
 async function mirrorToR2(fileId, type) {
   const token = process.env.BOT_TOKEN;
