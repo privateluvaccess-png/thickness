@@ -82,8 +82,8 @@ async function getFeed(tier, userId) {
     .from('posts')
     .select('*');
 
-  if (tier === 'free') {
-    query = query.eq('tier', 'free');
+  if (tier === 'free' || tier === 'premium') {
+    query = query.eq('tier', tier);
   }
 
   const { data: posts } = await query
