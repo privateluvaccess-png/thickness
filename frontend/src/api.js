@@ -8,7 +8,7 @@ const API = axios.create({
 export const loginUser             = (initData)               => API.post('/api/users/login', { init_data: initData });
 export const getUser               = (telegramId)             => API.get(`/api/users/${telegramId}`);
 export const getFreeFeed           = (userId)                => API.get(`/api/posts/feed?tier=free${userId ? `&user_id=${userId}` : ''}`);
-export const getFullFeed           = (userId)                => API.get(`/api/posts/feed?tier=all${userId ? `&user_id=${userId}` : ''}`);
+export const getFullFeed           = (userId)                => API.get(`/api/posts/feed?tier=premium${userId ? `&user_id=${userId}` : ''}`);
 export const getPost               = (postId)                 => API.get(`/api/posts/${postId}`);
 export const getSubscription       = (telegramId)             => API.get(`/api/subscriptions/${telegramId}`);
 export const createInvoice         = (telegramId, productKey) => API.post('/api/payments/invoice', { telegram_id: telegramId, product_key: productKey });
@@ -23,3 +23,4 @@ export const markNotificationsRead = (userId)                 => API.post(`/api/
 
 export const deletePost            = (postId, adminSecret)    => API.delete(`/api/posts/${postId}`, { headers: { 'x-admin-secret': adminSecret } });
 export const getActiveLink = () => API.get('/api/link');
+export const checkDevPassword     = (password)                => API.post('/api/auth/dev-unlock', { password });
