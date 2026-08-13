@@ -6,6 +6,78 @@ import { getFreeFeed, getFullFeed, getActiveLink } from '../api';
 import { useLanguage } from '../i18n/LanguageContext';
 import giftBox from '../assets/adbox.webp';
 
+const BACKEND = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+
+// Shown when a free user hits the scroll threshold — plays exactly one
+// premium video/image full-screen, with a CTA to go premium.
+function TeaserUnlock({ post, onClose, onUpgrade }) {
+  const mediaUrl = post.media_url || `${BACKEND}/api/posts/media/${post.file_id}`;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black flex flex-col">
+      <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/80 to-transparent absolute top-0 left-0 right-0 z-10">
+        <span className="text-amber-400 text-sm font-semibold flex items-center gap-1">
+          🎁 Free Premium Unlock
+        </span>
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          className="w-9 h-9 rounded-full bg-black/50 text-white flex items-center justify-center"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div className="flex-1 flex items-center justify-center">
+        {post.type === 'video' ? (
+          <video
+            src={mediaUrl}
+            autoPlay
+            controls
+            playsInline
+            className="max-h-full max-w-full"
+          />
+        ) : (
+          <img src={mediaUrl} alt="" className="max-h-full max-w-full object-contain" />
+        )}
+      </div>
+
+      <div className="p-4 bg-gradient-to-t from-black/90 to-transparent">
+        <p className="text-center text-gray-300 text-sm mb-3">
+          This is a free peek from Premium. Unlock everything, anytime.
+        </p>
+        <button
+          onClick={onUpgrade}
+          className="w-full py-3 rounded-xl bg-amber-500 text-black font-semibold"
+        >
+          ⭐ Unlock Premium
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+// Small floating progress indicator: "X more posts to unlock a free video"
+function TeaserProgress({ viewed, threshold }) {
+  const remaining = Math.max(threshold - (viewed % threshold), 1);
+  const pct = ((viewed % threshold) / threshold) * 100;
+
+  return (
+    <div className="sticky top-0 z-10 mx-4 mb-3 px-3 py-2 rounded-xl bg-zinc-900/90 border border-amber-500/30 backdrop-blur">
+      <p className="text-xs text-amber-400 font-medium mb-1">
+        🎁 {remaining} more post{remaining === 1 ? '' : 's'} to unlock a free premium video
+      </p>
+      <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+        <div
+          className="h-full bg-amber-500 transition-all duration-300"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 function extractUrl(text) {
   if (!text) return null;
   const match = text.match(/https?:\/\/[^\s]+/);
@@ -216,6 +288,15 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, admin
   const [activeTab,    setActiveTab]    = useState('free');
   const [overlayUrl,   setOverlayUrl]   = useState(null);
   const [currentPage,  setCurrentPage]  = useState(1);
+
+  // Scroll-to-unlock teaser feature (free users only)
+  const TEASER_THRESHOLD = 7;
+  const [teaserPool,       setTeaserPool]       = useState([]);
+  const [viewedCount,      setViewedCount]      = useState(0);
+  const [teaserIndex,      setTeaserIndex]      = useState(0);
+  const [activeTeaser,     setActiveTeaser]     = useState(null);
+  const seenPostIds = useRef(new Set());
+  const observerRef = useRef(null);
   const postRefs = useRef({});
   const scrollRef = useRef(null);
 
@@ -228,6 +309,12 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, admin
         if (isPremium || isAdmin) {
           const fullRes = await getFullFeed(telegramId);
           setPremiumPosts((fullRes.data.posts || []).filter(p => p.tier === 'premium'));
+        } else {
+          // Free users don't get the full premium tab, but we still need
+          // a small pool of premium posts to rotate through for the
+          // scroll-to-unlock teaser feature.
+          const teaserRes = await getFullFeed(telegramId);
+          setTeaserPool((teaserRes.data.posts || []).filter(p => p.tier === 'premium'));
         }
       } catch (err) {
         console.error(err);
@@ -276,6 +363,46 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, admin
     setPremiumPosts(prev => prev.filter(p => p.id !== postId));
   }
 
+  // Track how many distinct free posts the user has actually scrolled
+  // past (50%+ visible), and unlock one premium teaser video every
+  // TEASER_THRESHOLD posts. Only runs for free (non-premium, non-admin)
+  // users, and only while looking at the Free tab.
+  useEffect(() => {
+    if (isPremium || isAdmin || activeTab !== 'free') return;
+    if (teaserPool.length === 0) return;
+
+    observerRef.current?.disconnect();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach(entry => {
+          if (!entry.isIntersecting) return;
+          const postId = entry.target.dataset.postId;
+          if (!postId || seenPostIds.current.has(postId)) return;
+          seenPostIds.current.add(postId);
+
+          setViewedCount(prev => {
+            const next = prev + 1;
+            if (next % TEASER_THRESHOLD === 0) {
+              setTeaserIndex(idx => {
+                const post = teaserPool[idx % teaserPool.length];
+                setActiveTeaser(post);
+                return idx + 1;
+              });
+            }
+            return next;
+          });
+        });
+      },
+      { threshold: 0.5 }
+    );
+
+    Object.values(postRefs.current).forEach(el => {
+      if (el && el.isConnected) observer.observe(el);
+    });
+    observerRef.current = observer;
+    return () => observer.disconnect();
+  }, [currentPage, activeTab, freePosts, isPremium, isAdmin, teaserPool]);
+
   // Reset to page 1 whenever the visible tab changes
   useEffect(() => {
     setCurrentPage(1);
@@ -305,6 +432,14 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, admin
     <div className="flex flex-col h-full">
       {overlayUrl && <LinkOverlay url={overlayUrl} onClose={() => setOverlayUrl(null)} />}
 
+      {activeTeaser && (
+        <TeaserUnlock
+          post={activeTeaser}
+          onClose={() => setActiveTeaser(null)}
+          onUpgrade={() => { setActiveTeaser(null); setShowGate(true); }}
+        />
+      )}
+
       <div className="flex border-b border-border mb-4">
         <button
           onClick={() => setActiveTab('free')}
@@ -326,6 +461,9 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, admin
         <p className="text-center text-gray-500 mt-10">{t('noPosts')}</p>
       ) : (
         <div ref={scrollRef} className="overflow-y-auto pb-20">
+          {activeTab === 'free' && !isPremium && !isAdmin && teaserPool.length > 0 && (
+            <TeaserProgress viewed={viewedCount} threshold={TEASER_THRESHOLD} />
+          )}
           {pagePosts.map(post => (
             <PostCard
               key={post.id}
@@ -336,7 +474,7 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, admin
               isAdmin={isAdmin}
               adminSecret={adminSecret}
               onDeleted={handleDeleted}
-              postRef={el => { if (el) postRefs.current[post.id] = el; }}
+              postRef={el => { if (el) { el.dataset.postId = post.id; postRefs.current[post.id] = el; } }}
               adUrl={overlayUrl}
             />
           ))}
