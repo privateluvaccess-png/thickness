@@ -112,6 +112,8 @@ function AppInner({ user, isPremium, setIsPremium, expiresAt, devBoostUnlocked, 
             devBoostUnlocked={devBoostUnlocked}
             onDevBoost={() => setDevBoost(true)}
             onNavigate={(postId) => setNavigateToPostId(postId)}
+            isAdmin={isAdmin}
+            adminSecret={ADMIN_SECRET}
           />
         </div>
       </div>
