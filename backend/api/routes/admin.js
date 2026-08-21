@@ -1,6 +1,60 @@
 const router = require('express').Router();
 const supabase = require('../../supabase');
 const { uploadToR2 } = require('../../modules/r2');
+const { getPostsAdmin } = require('../../modules/posts');
+const requireAdmin = require('../../middleware/requireAdmin');
+
+// ── Admin panel: paginated post list ────────────────────────────────────────
+// This is the foundation the Channel Admin panel (and later gamification
+// config screens) will build on. Keyset-paginated, small default page size,
+// no polling expected client-side — the frontend fetches on open + on
+// explicit "Load more" taps only.
+// GET /api/admin/posts?limit=20&cursor=ISO_TIMESTAMP
+router.get('/posts', requireAdmin, async (req, res) => {
+  try {
+    const { limit, cursor } = req.query;
+    const result = await getPostsAdmin({ limit, cursor });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Admin panel: lightweight stats ──────────────────────────────────────────
+// Uses `head: true` count-only queries (no rows transferred) and an
+// in-memory TTL cache, so re-opening the panel doesn't re-run four count
+// queries against Supabase every time — keeps us well within free-tier
+// read limits even with frequent admin checks.
+let statsCache = { data: null, expiresAt: 0 };
+const STATS_TTL_MS = 60 * 1000;
+
+router.get('/stats', requireAdmin, async (req, res) => {
+  try {
+    if (statsCache.data && Date.now() < statsCache.expiresAt) {
+      return res.json({ success: true, stats: statsCache.data, cached: true });
+    }
+
+    const [postsCount, usersCount, premiumCount, freePostsCount] = await Promise.all([
+      supabase.from('posts').select('id', { count: 'exact', head: true }),
+      supabase.from('users').select('telegram_id', { count: 'exact', head: true }),
+      supabase.from('subscriptions').select('user_id', { count: 'exact', head: true }),
+      supabase.from('posts').select('id', { count: 'exact', head: true }).eq('tier', 'free'),
+    ]);
+
+    const stats = {
+      totalPosts: postsCount.count || 0,
+      freePosts: freePostsCount.count || 0,
+      premiumPosts: (postsCount.count || 0) - (freePostsCount.count || 0),
+      totalUsers: usersCount.count || 0,
+      subscriptionRecords: premiumCount.count || 0,
+    };
+
+    statsCache = { data: stats, expiresAt: Date.now() + STATS_TTL_MS };
+    res.json({ success: true, stats, cached: false });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 const TELEGRAM_API_ROOT      = process.env.TELEGRAM_API_ROOT || 'https://api.telegram.org';
 const TELEGRAM_FILE_API_ROOT = process.env.TELEGRAM_FILE_API_ROOT || 'https://api.telegram.org';
