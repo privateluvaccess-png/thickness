@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import BookmarksSheet from './BookmarksSheet';
+import AdminPanel from './AdminPanel';
 
 const BACKEND = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
-export default function ProfileButton({ user, isPremium, expiresAt, devBoostUnlocked, onDevBoost, onNavigate }) {
+export default function ProfileButton({ user, isPremium, expiresAt, devBoostUnlocked, onDevBoost, onNavigate, isAdmin, adminSecret }) {
   const [open,          setOpen]          = useState(false);
   const [showBookmarks, setShowBookmarks] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [boosting,      setBoosting]      = useState(false);
   const [boostMsg,      setBoostMsg]      = useState('');
   const [showSecretPrompt, setShowSecretPrompt] = useState(false);
@@ -104,6 +106,16 @@ export default function ProfileButton({ user, isPremium, expiresAt, devBoostUnlo
               🔖 Saved Posts
             </button>
 
+            {/* Channel Admin — only for the admin Telegram account */}
+            {isAdmin && adminSecret && (
+              <button
+                onClick={() => setShowAdminPanel(true)}
+                className="w-full py-3 rounded-xl bg-zinc-800 text-white text-sm font-medium flex items-center justify-center gap-2"
+              >
+                🛠 Channel Admin
+              </button>
+            )}
+
             {/* DevBoost — only visible after secret logo tap */}
             {devBoostUnlocked && !isPremium && (
               <div className="flex flex-col gap-2">
@@ -155,6 +167,13 @@ export default function ProfileButton({ user, isPremium, expiresAt, devBoostUnlo
           userId={user?.telegram_id}
           onClose={() => setShowBookmarks(false)}
           onNavigate={onNavigate}
+        />
+      )}
+
+      {showAdminPanel && (
+        <AdminPanel
+          adminSecret={adminSecret}
+          onClose={() => setShowAdminPanel(false)}
         />
       )}
     </>
