@@ -124,6 +124,33 @@ async function getPostById(postId) {
   return data;
 }
 
+// Admin: paginated list across all tiers, newest first.
+// Uses keyset ("cursor") pagination on the indexed created_at column
+// instead of OFFSET, so pages stay cheap even as the table grows —
+// important on Supabase's free-tier compute/row-read limits.
+async function getPostsAdmin({ limit = 20, cursor = null } = {}) {
+  const safeLimit = Math.min(Math.max(parseInt(limit) || 20, 1), 50);
+
+  let query = supabase
+    .from('posts')
+    .select('id, tier, type, caption, created_at')
+    .order('created_at', { ascending: false })
+    .limit(safeLimit + 1); // fetch one extra to know if there's a next page
+
+  if (cursor) {
+    query = query.lt('created_at', cursor);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const hasMore = data.length > safeLimit;
+  const posts = hasMore ? data.slice(0, safeLimit) : data;
+  const nextCursor = hasMore ? posts[posts.length - 1].created_at : null;
+
+  return { posts, nextCursor };
+}
+
 // Delete by telegram_message_id (used by bot on channel post delete)
 async function deletePost(telegramMessageId) {
   await supabase
@@ -140,4 +167,4 @@ async function deletePostById(postId) {
     .eq('id', postId);
 }
 
-module.exports = { syncPost, deletePost, deletePostById, getFeed, getPostById };
+module.exports = { syncPost, deletePost, deletePostById, getFeed, getPostById, getPostsAdmin };
