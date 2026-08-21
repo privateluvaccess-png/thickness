@@ -1,5 +1,6 @@
 const router = require('express').Router();
 const { getFeed, getPostById, deletePostById } = require('../../modules/posts');
+const requireAdmin = require('../../middleware/requireAdmin');
 
 // Proxy Telegram file so the frontend can display images/videos.
 // TELEGRAM_API_ROOT points at a self-hosted telegram-bot-api instance
@@ -61,13 +62,8 @@ router.get('/feed', async (req, res) => {
 });
 
 // Admin: delete a post by its database ID
-router.delete('/:post_id', async (req, res) => {
+router.delete('/:post_id', requireAdmin, async (req, res) => {
   try {
-    const adminSecret = process.env.ADMIN_SECRET;
-    const provided    = req.headers['x-admin-secret'];
-    if (!adminSecret || provided !== adminSecret) {
-      return res.status(403).json({ error: 'Forbidden' });
-    }
     await deletePostById(req.params.post_id);
     res.json({ success: true });
   } catch (err) {
