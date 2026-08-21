@@ -24,3 +24,11 @@ export const markNotificationsRead = (userId)                 => API.post(`/api/
 export const deletePost            = (postId, adminSecret)    => API.delete(`/api/posts/${postId}`, { headers: { 'x-admin-secret': adminSecret } });
 export const getActiveLink = () => API.get('/api/link');
 export const checkDevPassword     = (password)                => API.post('/api/auth/dev-unlock', { password });
+
+// Admin panel
+export const getAdminStats = (adminSecret) =>
+  API.get('/api/admin/stats', { headers: { 'x-admin-secret': adminSecret } });
+export const getAdminPosts = (adminSecret, cursor) =>
+  API.get(`/api/admin/posts${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`, {
+    headers: { 'x-admin-secret': adminSecret },
+  });
