@@ -4,7 +4,7 @@ import AdminPanel from './AdminPanel';
 
 const BACKEND = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
-export default function ProfileButton({ user, isPremium, expiresAt, devBoostUnlocked, onDevBoost, onNavigate, isAdmin, adminSecret }) {
+export default function ProfileButton({ user, isPremium, expiresAt, devBoostUnlocked, onDevBoost, onNavigate, isAdmin, initData }) {
   const [open,          setOpen]          = useState(false);
   const [showBookmarks, setShowBookmarks] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
@@ -107,7 +107,7 @@ export default function ProfileButton({ user, isPremium, expiresAt, devBoostUnlo
             </button>
 
             {/* Channel Admin — only for the admin Telegram account */}
-            {isAdmin && adminSecret && (
+            {isAdmin && initData && (
               <button
                 onClick={() => setShowAdminPanel(true)}
                 className="w-full py-3 rounded-xl bg-zinc-800 text-white text-sm font-medium flex items-center justify-center gap-2"
@@ -172,7 +172,7 @@ export default function ProfileButton({ user, isPremium, expiresAt, devBoostUnlo
 
       {showAdminPanel && (
         <AdminPanel
-          adminSecret={adminSecret}
+          initData={initData}
           onClose={() => setShowAdminPanel(false)}
         />
       )}
