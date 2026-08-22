@@ -1,4 +1,5 @@
 const supabase = require('../../supabase');
+const { recordMissionAction } = require('../missions');
 
 async function toggleLike(userId, postId) {
   const { data: existing } = await supabase
@@ -16,6 +17,13 @@ async function toggleLike(userId, postId) {
   }
 
   await supabase.from('likes').insert({ user_id: userId, post_id: postId });
+
+  // Count toward any active "like posts" mission — deduped per post
+  // per day inside recordMissionAction, so like/unlike/like spam
+  // can't farm progress.
+  recordMissionAction(userId, 'like_post', postId).catch(err =>
+    console.error('[likes] recordMissionAction failed:', err.message)
+  );
 
   // Notify post owner
   const { data: post } = await supabase
