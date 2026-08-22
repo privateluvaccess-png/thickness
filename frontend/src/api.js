@@ -21,14 +21,25 @@ export const getUserBookmarks      = (userId)                 => API.get(`/api/b
 export const getNotifications      = (userId)                 => API.get(`/api/notifications/${userId}`);
 export const markNotificationsRead = (userId)                 => API.post(`/api/notifications/read/${userId}`);
 
-export const deletePost            = (postId, adminSecret)    => API.delete(`/api/posts/${postId}`, { headers: { 'x-admin-secret': adminSecret } });
+export const deletePost            = (postId, initData)       => API.delete(`/api/posts/${postId}`, { headers: { 'x-telegram-init-data': initData } });
 export const getActiveLink = () => API.get('/api/link');
 export const checkDevPassword     = (password)                => API.post('/api/auth/dev-unlock', { password });
 
-// Admin panel
-export const getAdminStats = (adminSecret) =>
-  API.get('/api/admin/stats', { headers: { 'x-admin-secret': adminSecret } });
-export const getAdminPosts = (adminSecret, cursor) =>
+// Admin panel — authenticated via Telegram's own signed initData
+// (verified server-side against BOT_TOKEN), not a client-visible secret.
+export const getAdminStats = (initData) =>
+  API.get('/api/admin/stats', { headers: { 'x-telegram-init-data': initData } });
+export const getAdminPosts = (initData, cursor) =>
   API.get(`/api/admin/posts${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`, {
-    headers: { 'x-admin-secret': adminSecret },
+    headers: { 'x-telegram-init-data': initData },
   });
+
+// Admin panel — Premium (paid/lifetime/earned breakdown, manual grant/revoke)
+export const getAdminPremiumBreakdown = (initData, userId) =>
+  API.get(`/api/admin/premium/${userId}`, { headers: { 'x-telegram-init-data': initData } });
+export const getAdminPremiumHistory = (initData, userId) =>
+  API.get(`/api/admin/premium/${userId}/history`, { headers: { 'x-telegram-init-data': initData } });
+export const grantAdminPremium = (initData, userId, days, note) =>
+  API.post('/api/admin/premium/grant', { user_id: userId, days, note }, { headers: { 'x-telegram-init-data': initData } });
+export const revokeAdminPremium = (initData, userId, note) =>
+  API.post('/api/admin/premium/revoke', { user_id: userId, note }, { headers: { 'x-telegram-init-data': initData } });
