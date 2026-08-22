@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import BookmarksSheet from './BookmarksSheet';
 import AdminPanel from './AdminPanel';
 import RewardedAdButton from './RewardedAdButton';
+import ChallengesSection from './ChallengesSection';
 import { getMyXp } from '../api';
 
 const BACKEND = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
@@ -117,6 +118,8 @@ export default function ProfileButton({ user, isPremium, expiresAt, devBoostUnlo
             )}
 
             <RewardedAdButton telegramId={user?.telegram_id} onXpRefresh={refreshXp} />
+
+            <ChallengesSection telegramId={user?.telegram_id} onReward={refreshXp} />
 
             <button
               onClick={() => setShowBookmarks(true)}
