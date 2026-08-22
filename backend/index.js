@@ -50,6 +50,7 @@ app.use('/api/notifications', require('./api/routes/notifications'));
 app.use('/api/link',          require('./api/routes/link'));
 app.use('/api/xp',            require('./api/routes/xp'));
 app.use('/api/ads',           require('./api/routes/ads'));
+app.use('/api/rewards',       require('./api/routes/rewards'));
 app.use('/api/admin',         require('./api/routes/admin'));
 
 // Inject bot into payments module
