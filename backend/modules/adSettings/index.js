@@ -27,10 +27,15 @@ async function getAdSettings() {
 
 // Partial update — only the fields present in `fields` are changed.
 async function updateAdSettings(fields, adminTelegramId) {
-  const allowed = ['inapp_interstitial_enabled', 'rewarded_popup_enabled', 'rewarded_interstitial_enabled'];
+  const booleanKeys = ['inapp_interstitial_enabled', 'rewarded_popup_enabled', 'rewarded_interstitial_enabled'];
+  const intKeys = ['xp_per_rewarded_ad', 'daily_ad_limit'];
+
   const patch = {};
-  for (const key of allowed) {
+  for (const key of booleanKeys) {
     if (typeof fields[key] === 'boolean') patch[key] = fields[key];
+  }
+  for (const key of intKeys) {
+    if (Number.isInteger(Number(fields[key])) && Number(fields[key]) > 0) patch[key] = Number(fields[key]);
   }
 
   const { data, error } = await supabase
