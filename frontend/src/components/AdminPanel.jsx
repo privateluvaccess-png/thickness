@@ -3,6 +3,7 @@ import {
   getAdminStats, getAdminPosts, deletePost,
   getAdminPremiumBreakdown, getAdminPremiumHistory,
   grantAdminPremium, revokeAdminPremium,
+  getAdminXp, grantAdminXp,
 } from '../api';
 
 // Foundation panel for the (previously nonexistent) Channel Admin UI.
@@ -112,6 +113,9 @@ export default function AdminPanel({ initData, onClose }) {
 
               {/* Premium lookup / manual grant-revoke */}
               <PremiumSection initData={initData} />
+
+              {/* XP ledger lookup / manual adjustment */}
+              <XpSection initData={initData} />
 
               {/* Post list */}
               <div className="flex flex-col gap-2">
@@ -320,6 +324,132 @@ function PremiumSection({ initData }) {
                   <span className="text-gray-300 font-medium">{h.action}</span>
                   {' · '}{h.source}
                   {h.days_granted ? ` · +${h.days_granted}d` : ''}
+                  {' · '}{new Date(h.created_at).toLocaleDateString()}
+                  {h.note ? ` · "${h.note}"` : ''}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// XP ledger lookup + manual adjustment (positive to grant, negative to
+// deduct — e.g. correcting an exploit). Every adjustment goes through
+// the same atomic award_xp function as every other XP source, so the
+// ledger itself is the audit trail — no separate log to check here.
+function XpSection({ initData }) {
+  const [userId, setUserId]     = useState('');
+  const [summary, setSummary]   = useState(null);
+  const [history, setHistory]   = useState([]);
+  const [points, setPoints]     = useState('50');
+  const [note, setNote]         = useState('');
+  const [loading, setLoading]   = useState(false);
+  const [busy, setBusy]         = useState(false);
+  const [error, setError]       = useState('');
+
+  async function lookup() {
+    if (!userId.trim()) return;
+    setLoading(true);
+    setError('');
+    setSummary(null);
+    try {
+      const res = await getAdminXp(initData, userId.trim());
+      setSummary(res.data);
+      setHistory(res.data.history || []);
+    } catch (err) {
+      setError(err?.response?.data?.error || err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleAdjust() {
+    const pts = Number(points);
+    if (!pts) return;
+    setBusy(true);
+    try {
+      await grantAdminXp(initData, userId.trim(), pts, note || undefined);
+      setNote('');
+      await lookup();
+    } catch (err) {
+      alert('Adjustment failed: ' + (err?.response?.data?.error || err.message));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2 bg-zinc-800/50 rounded-xl p-3">
+      <span className="text-gray-400 text-xs font-semibold uppercase">XP Lookup</span>
+
+      <div className="flex gap-2">
+        <input
+          value={userId}
+          onChange={e => setUserId(e.target.value)}
+          placeholder="Telegram user ID"
+          className="flex-1 bg-zinc-900 text-white text-sm rounded-lg px-3 py-2 outline-none"
+        />
+        <button
+          onClick={lookup}
+          disabled={loading || !userId.trim()}
+          className="bg-zinc-700 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-50"
+        >
+          {loading ? '...' : 'Look up'}
+        </button>
+      </div>
+
+      {error && <p className="text-red-400 text-xs">{error}</p>}
+
+      {summary && (
+        <div className="flex flex-col gap-3 mt-1">
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="bg-zinc-900 rounded-lg px-3 py-2">
+              <p className="text-gray-500">Lifetime XP</p>
+              <p className="text-white font-semibold">{summary.lifetimeXp}</p>
+            </div>
+            <div className="bg-zinc-900 rounded-lg px-3 py-2">
+              <p className="text-gray-500">This week ({summary.weekKey})</p>
+              <p className="text-white font-semibold">{summary.weeklyXp}</p>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-2 items-center">
+              <input
+                type="number"
+                value={points}
+                onChange={e => setPoints(e.target.value)}
+                className="w-24 bg-zinc-900 text-white text-sm rounded-lg px-3 py-2 outline-none"
+              />
+              <span className="text-gray-500 text-xs">XP (negative to deduct)</span>
+            </div>
+            <input
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              placeholder="Note (optional, for audit log)"
+              className="bg-zinc-900 text-white text-sm rounded-lg px-3 py-2 outline-none"
+            />
+            <button
+              onClick={handleAdjust}
+              disabled={busy}
+              className="w-full bg-amber-600/20 text-amber-400 text-sm font-bold py-2 rounded-lg disabled:opacity-50"
+            >
+              Apply Adjustment
+            </button>
+          </div>
+
+          {history.length > 0 && (
+            <div className="flex flex-col gap-1">
+              <span className="text-gray-500 text-xs">Recent activity</span>
+              {history.map(h => (
+                <div key={h.id} className="text-xs text-gray-400 bg-zinc-900 rounded-lg px-3 py-2">
+                  <span className={h.points >= 0 ? 'text-green-400 font-medium' : 'text-red-400 font-medium'}>
+                    {h.points >= 0 ? `+${h.points}` : h.points}
+                  </span>
+                  {' · '}{h.source}
                   {' · '}{new Date(h.created_at).toLocaleDateString()}
                   {h.note ? ` · "${h.note}"` : ''}
                 </div>
