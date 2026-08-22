@@ -10,6 +10,10 @@ const {
 } = require('../../modules/subscriptions');
 const { getUserXpSummary, getUserXpHistory, manualAwardXp } = require('../../modules/xp');
 const { getAdSettings, updateAdSettings } = require('../../modules/adSettings');
+const { getGiftHuntSettings, updateGiftHuntSettings } = require('../../modules/giftHunt');
+const {
+  adminListMissions, adminCreateMission, adminUpdateMission, adminDeleteMission,
+} = require('../../modules/missions');
 const requireAdmin = require('../../middleware/requireAdmin');
 
 // ── Admin panel: paginated post list ────────────────────────────────────────
@@ -171,6 +175,66 @@ router.post('/ads/settings', requireAdmin, async (req, res) => {
   try {
     const settings = await updateAdSettings(req.body || {}, req.adminTelegramId);
     res.json({ success: true, settings });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Admin panel: Gift Hunt settings ─────────────────────────────────────────
+router.get('/gift-hunt/settings', requireAdmin, async (req, res) => {
+  try {
+    const settings = await getGiftHuntSettings();
+    res.json({ success: true, settings });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/gift-hunt/settings', requireAdmin, async (req, res) => {
+  try {
+    const settings = await updateGiftHuntSettings(req.body || {}, req.adminTelegramId);
+    res.json({ success: true, settings });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Admin panel: Missions CRUD ──────────────────────────────────────────────
+router.get('/missions', requireAdmin, async (req, res) => {
+  try {
+    const missions = await adminListMissions();
+    res.json({ success: true, missions });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/missions', requireAdmin, async (req, res) => {
+  try {
+    const { title, requirementType, requirementCount, xpReward, sortOrder } = req.body || {};
+    if (!title || !requirementType) {
+      return res.status(400).json({ error: 'title and requirementType are required' });
+    }
+    const mission = await adminCreateMission({ title, requirementType, requirementCount, xpReward, sortOrder });
+    res.json({ success: true, mission });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch('/missions/:id', requireAdmin, async (req, res) => {
+  try {
+    const mission = await adminUpdateMission(req.params.id, req.body || {});
+    res.json({ success: true, mission });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/missions/:id', requireAdmin, async (req, res) => {
+  try {
+    await adminDeleteMission(req.params.id);
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
