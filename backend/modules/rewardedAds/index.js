@@ -1,6 +1,7 @@
 const supabase = require('../../supabase');
 const { awardXp } = require('../xp');
 const { getAdSettings } = require('../adSettings');
+const { recordMissionAction } = require('../missions');
 
 // Extracts the telegram user id we embedded as a prefix when the
 // frontend generated the ymid (see frontend: `u${telegramId}-...`).
@@ -58,6 +59,14 @@ async function processMonetagPostback({ ymid, telegramIdFromMacro, format, event
   // reference_id=ymid) is the real duplicate-prevention backstop, in
   // case this postback is ever retried by Monetag.
   const xpResult = await awardXp(userId, points, 'rewarded_ad', ymid);
+
+  if (xpResult.awarded) {
+    // Also counts toward any active "watch ads" mission — the ymid
+    // itself is the dedup key, so a retried postback can't double-count.
+    recordMissionAction(userId, 'watch_ad', ymid).catch(err =>
+      console.error('[rewardedAds] recordMissionAction failed:', err.message)
+    );
+  }
 
   await _recordEvent({
     userId, ymid, format, eventType, rewardEventType, estimatedPrice,
