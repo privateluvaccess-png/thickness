@@ -1,20 +1,50 @@
+const { verifyTelegramInitData } = require('../modules/users');
+
 // Single shared Channel Admin authorization check.
 //
-// This formalizes the pattern already used ad-hoc in posts.js/admin.js
-// (compare an `x-admin-secret` header to process.env.ADMIN_SECRET) into
-// one reusable middleware, so every future admin/gamification-config
-// endpoint authenticates the same way instead of duplicating the check.
-//
-// Intentionally NOT a new admin system: same secret, same env var,
-// same trust model already in use — just centralized.
-function requireAdmin(req, res, next) {
-  const adminSecret = process.env.ADMIN_SECRET;
-  const provided = req.headers['x-admin-secret'];
+// This does NOT rely on a static secret sent from the browser (which,
+// for a Vite app, would necessarily end up inside the public JS bundle
+// and be readable by anyone). Instead it reuses the same mechanism
+// already used to log users in: Telegram signs `initData` with an
+// HMAC keyed on BOT_TOKEN (server-only, never shipped to the client).
+// We re-verify that signature here and check the *verified* Telegram
+// user ID against a server-side admin allowlist — nothing the client
+// sends can forge this without BOT_TOKEN.
+function getAdminIds() {
+  return (process.env.ADMIN_TELEGRAM_IDS || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+}
 
-  if (!adminSecret || provided !== adminSecret) {
-    return res.status(403).json({ error: 'Forbidden' });
+function requireAdmin(req, res, next) {
+  const initData = req.headers['x-telegram-init-data'];
+  if (!initData) {
+    const reason = 'No Telegram init data was received by the server.';
+    console.warn('[requireAdmin] rejected:', reason);
+    return res.status(403).json({ error: reason });
   }
 
+  const telegramUser = verifyTelegramInitData(initData);
+  if (!telegramUser) {
+    const reason = 'Telegram signature verification failed (BOT_TOKEN mismatch, or the session is stale — try reopening the app).';
+    console.warn('[requireAdmin] rejected:', reason);
+    return res.status(403).json({ error: reason });
+  }
+
+  const adminIds = getAdminIds();
+  if (adminIds.length === 0) {
+    const reason = 'ADMIN_TELEGRAM_IDS is not set (or empty) on the server.';
+    console.warn('[requireAdmin] rejected:', reason);
+    return res.status(403).json({ error: reason });
+  }
+  if (!adminIds.includes(String(telegramUser.id))) {
+    const reason = `Your Telegram ID (${telegramUser.id}) is not in ADMIN_TELEGRAM_IDS (currently configured: ${adminIds.join(', ')}).`;
+    console.warn('[requireAdmin] rejected:', reason);
+    return res.status(403).json({ error: reason });
+  }
+
+  req.adminTelegramId = telegramUser.id;
   next();
 }
 
