@@ -9,6 +9,7 @@ const {
   getEarnedPremiumHistory,
 } = require('../../modules/subscriptions');
 const { getUserXpSummary, getUserXpHistory, manualAwardXp } = require('../../modules/xp');
+const { getAdSettings, updateAdSettings } = require('../../modules/adSettings');
 const requireAdmin = require('../../middleware/requireAdmin');
 
 // ── Admin panel: paginated post list ────────────────────────────────────────
@@ -145,6 +146,31 @@ router.post('/xp/grant', requireAdmin, async (req, res) => {
     }
     const result = await manualAwardXp(user_id, Number(points), req.adminTelegramId, note);
     res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Admin panel: Ad format toggles ──────────────────────────────────────────
+// Each Monetag format (In-App Interstitial, Rewarded Popup, Rewarded
+// Interstitial) can be switched on/off independently — the admin can
+// leave any combination on, including just one.
+
+// GET /api/admin/ads/settings
+router.get('/ads/settings', requireAdmin, async (req, res) => {
+  try {
+    const settings = await getAdSettings();
+    res.json({ success: true, settings });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/ads/settings  { inapp_interstitial_enabled?, rewarded_popup_enabled?, rewarded_interstitial_enabled? }
+router.post('/ads/settings', requireAdmin, async (req, res) => {
+  try {
+    const settings = await updateAdSettings(req.body || {}, req.adminTelegramId);
+    res.json({ success: true, settings });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
