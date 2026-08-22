@@ -43,3 +43,12 @@ export const grantAdminPremium = (initData, userId, days, note) =>
   API.post('/api/admin/premium/grant', { user_id: userId, days, note }, { headers: { 'x-telegram-init-data': initData } });
 export const revokeAdminPremium = (initData, userId, note) =>
   API.post('/api/admin/premium/revoke', { user_id: userId, note }, { headers: { 'x-telegram-init-data': initData } });
+
+// Admin panel — XP ledger lookup + manual adjustment
+export const getAdminXp = (initData, userId) =>
+  API.get(`/api/admin/xp/${userId}`, { headers: { 'x-telegram-init-data': initData } });
+export const grantAdminXp = (initData, userId, points, note) =>
+  API.post('/api/admin/xp/grant', { user_id: userId, points, note }, { headers: { 'x-telegram-init-data': initData } });
+
+// Read a user's own XP summary (used by the future Level/XP display)
+export const getMyXp = (userId) => API.get(`/api/xp/${userId}`);
