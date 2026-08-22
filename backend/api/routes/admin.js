@@ -8,6 +8,7 @@ const {
   revokeEarnedPremium,
   getEarnedPremiumHistory,
 } = require('../../modules/subscriptions');
+const { getUserXpSummary, getUserXpHistory, manualAwardXp } = require('../../modules/xp');
 const requireAdmin = require('../../middleware/requireAdmin');
 
 // ── Admin panel: paginated post list ────────────────────────────────────────
@@ -110,6 +111,39 @@ router.post('/premium/revoke', requireAdmin, async (req, res) => {
     const { user_id, note } = req.body;
     if (!user_id) return res.status(400).json({ error: 'user_id is required' });
     const result = await revokeEarnedPremium(user_id, String(req.adminTelegramId), note);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Admin panel: XP ledger (lookup + manual adjustment) ─────────────────────
+// Manual adjustments go through the same atomic award_xp function as
+// every other XP source, tagged with the admin's telegram ID and an
+// optional note — the ledger itself is the audit trail.
+
+// GET /api/admin/xp/:user_id
+router.get('/xp/:user_id', requireAdmin, async (req, res) => {
+  try {
+    const [summary, history] = await Promise.all([
+      getUserXpSummary(req.params.user_id),
+      getUserXpHistory(req.params.user_id, 20),
+    ]);
+    res.json({ success: true, ...summary, history });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/xp/grant  { user_id, points, note }
+// `points` may be negative to deduct XP (e.g. correcting an exploit).
+router.post('/xp/grant', requireAdmin, async (req, res) => {
+  try {
+    const { user_id, points, note } = req.body;
+    if (!user_id || !points) {
+      return res.status(400).json({ error: 'user_id and a non-zero points value are required' });
+    }
+    const result = await manualAwardXp(user_id, Number(points), req.adminTelegramId, note);
     res.json({ success: true, ...result });
   } catch (err) {
     res.status(500).json({ error: err.message });
