@@ -7,7 +7,7 @@ import { languageLabels, languageOrder } from './i18n/translations';
 import logo from './assets/logo.webp';
 import ProfileButton from './components/ProfileButton';
 
-function AppInner({ user, isPremium, setIsPremium, expiresAt, devBoostUnlocked, setDevBoost }) {
+function AppInner({ user, isPremium, setIsPremium, expiresAt, devBoostUnlocked, setDevBoost, initData }) {
   const { lang, setLang } = useLanguage();
   const [isDark, setIsDark]             = useState(true);
   const [showLangMenu, setShowLangMenu] = useState(false);
@@ -18,7 +18,6 @@ function AppInner({ user, isPremium, setIsPremium, expiresAt, devBoostUnlocked, 
 
   const DEV_PASSWORD = import.meta.env.VITE_DEV_PASSWORD || 'thickness_dev';
   const ADMIN_TG_ID  = import.meta.env.VITE_ADMIN_TELEGRAM_ID;
-  const ADMIN_SECRET = import.meta.env.VITE_ADMIN_SECRET;
 
   const tapCount = useRef(0);
   const tapTimer = useRef(null);
@@ -113,7 +112,7 @@ function AppInner({ user, isPremium, setIsPremium, expiresAt, devBoostUnlocked, 
             onDevBoost={() => setDevBoost(true)}
             onNavigate={(postId) => setNavigateToPostId(postId)}
             isAdmin={isAdmin}
-            adminSecret={ADMIN_SECRET}
+            initData={initData}
           />
         </div>
       </div>
@@ -125,7 +124,7 @@ function AppInner({ user, isPremium, setIsPremium, expiresAt, devBoostUnlocked, 
           telegramId={user?.telegram_id}
           onUnlocked={() => setIsPremium(true)}
           isAdmin={isAdmin}
-          adminSecret={ADMIN_SECRET}
+          initData={initData}
           navigateToPostId={navigateToPostId}
           onNavigated={() => setNavigateToPostId(null)}
         />
@@ -175,6 +174,11 @@ export default function App() {
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState(null);
   const [devBoostUnlocked, setDevBoost] = useState(false);
+  // Telegram's raw signed initData string. Kept in state (not just read
+  // once at login) so it can be sent with admin requests too — the
+  // backend re-verifies its HMAC signature against BOT_TOKEN on every
+  // admin call, so this is a proof of identity, not a bearer secret.
+  const [initData, setInitData]     = useState(null);
 
   // Start the in-app interstitial ad session once, globally.
   // This replaces the old per-tap popup: the SDK now manages its own
@@ -200,17 +204,18 @@ export default function App() {
         const tg = window.Telegram?.WebApp;
         tg?.expand();
 
-        const initData = tg?.initData;
+        const initDataStr = tg?.initData;
 
-        if (!initData) {
+        if (!initDataStr) {
           setError('Open this app inside Telegram.');
           setLoading(false);
           return;
         }
 
-        const loginRes = await loginUser(initData);
+        const loginRes = await loginUser(initDataStr);
         const userData = loginRes.data.user;
         setUser(userData);
+        setInitData(initDataStr);
 
         const subRes = await getSubscription(userData.telegram_id);
         setIsPremium(subRes.data.isPremium || false);
@@ -250,6 +255,7 @@ export default function App() {
         expiresAt={expiresAt}
         devBoostUnlocked={devBoostUnlocked}
         setDevBoost={setDevBoost}
+        initData={initData}
       />
     </LanguageProvider>
   );
