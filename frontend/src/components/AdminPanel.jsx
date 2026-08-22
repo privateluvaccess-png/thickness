@@ -203,10 +203,25 @@ function AdsSection({ initData }) {
     }
   }
 
+  async function updateNumber(key, value) {
+    const num = Number(value);
+    if (!Number.isInteger(num) || num <= 0) return;
+    setBusyKey(key);
+    setError('');
+    try {
+      const res = await updateAdminAdSettings(initData, { [key]: num });
+      setSettings(res.data.settings);
+    } catch (err) {
+      setError(err?.response?.data?.error || err.message);
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
   const FORMATS = [
     { key: 'inapp_interstitial_enabled', label: 'In-App Interstitial', hint: 'Auto-scheduled background ad (current default)' },
-    { key: 'rewarded_popup_enabled', label: 'Rewarded Popup', hint: "show_11218209('pop')" },
-    { key: 'rewarded_interstitial_enabled', label: 'Rewarded Interstitial', hint: 'show_11218209()' },
+    { key: 'rewarded_popup_enabled', label: 'Rewarded Popup', hint: "Verified via Monetag postback" },
+    { key: 'rewarded_interstitial_enabled', label: 'Rewarded Interstitial', hint: 'Verified via Monetag postback' },
   ];
 
   return (
@@ -238,6 +253,27 @@ function AdsSection({ initData }) {
               </button>
             </div>
           ))}
+
+          <div className="flex items-center justify-between bg-zinc-900 rounded-lg px-3 py-2.5">
+            <span className="text-white text-sm">XP per rewarded ad</span>
+            <input
+              type="number"
+              min="1"
+              defaultValue={settings.xp_per_rewarded_ad}
+              onBlur={e => updateNumber('xp_per_rewarded_ad', e.target.value)}
+              className="w-16 bg-zinc-800 text-white text-sm rounded-lg px-2 py-1 text-center outline-none"
+            />
+          </div>
+          <div className="flex items-center justify-between bg-zinc-900 rounded-lg px-3 py-2.5">
+            <span className="text-white text-sm">Daily ad limit (per user)</span>
+            <input
+              type="number"
+              min="1"
+              defaultValue={settings.daily_ad_limit}
+              onBlur={e => updateNumber('daily_ad_limit', e.target.value)}
+              className="w-16 bg-zinc-800 text-white text-sm rounded-lg px-2 py-1 text-center outline-none"
+            />
+          </div>
         </div>
       )}
     </div>
