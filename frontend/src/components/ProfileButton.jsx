@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import BookmarksSheet from './BookmarksSheet';
 import AdminPanel from './AdminPanel';
+import RewardedAdButton from './RewardedAdButton';
+import { getMyXp } from '../api';
 
 const BACKEND = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
@@ -12,6 +14,12 @@ export default function ProfileButton({ user, isPremium, expiresAt, devBoostUnlo
   const [boostMsg,      setBoostMsg]      = useState('');
   const [showSecretPrompt, setShowSecretPrompt] = useState(false);
   const [boostSecret,   setBoostSecret]   = useState('');
+  const [xp, setXp] = useState(null);
+
+  function refreshXp() {
+    if (!user?.telegram_id) return;
+    getMyXp(user.telegram_id).then(res => setXp(res.data)).catch(() => {});
+  }
 
   const initials  = user?.first_name?.slice(0, 1).toUpperCase() || '?';
   const avatarUrl = user?.photo_url || null;
@@ -48,7 +56,7 @@ export default function ProfileButton({ user, isPremium, expiresAt, devBoostUnlo
   return (
     <>
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => { setOpen(true); refreshXp(); }}
         className="relative w-9 h-9 rounded-full overflow-hidden border-2 border-border flex items-center justify-center bg-zinc-800 flex-shrink-0"
       >
         {avatarUrl ? (
@@ -98,6 +106,17 @@ export default function ProfileButton({ user, isPremium, expiresAt, devBoostUnlo
                 <span className="text-gray-500 text-sm">Free</span>
               )}
             </div>
+
+            {xp && (
+              <div className="bg-zinc-800 rounded-xl px-4 py-3 flex items-center justify-between">
+                <span className="text-gray-400 text-sm">XP</span>
+                <span className="text-white font-semibold text-sm">
+                  {xp.lifetimeXp} lifetime · {xp.weeklyXp} this week
+                </span>
+              </div>
+            )}
+
+            <RewardedAdButton telegramId={user?.telegram_id} onXpRefresh={refreshXp} />
 
             <button
               onClick={() => setShowBookmarks(true)}
