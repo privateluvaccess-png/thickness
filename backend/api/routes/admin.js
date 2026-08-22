@@ -2,6 +2,12 @@ const router = require('express').Router();
 const supabase = require('../../supabase');
 const { uploadToR2 } = require('../../modules/r2');
 const { getPostsAdmin } = require('../../modules/posts');
+const {
+  getPremiumBreakdown,
+  grantEarnedPremium,
+  revokeEarnedPremium,
+  getEarnedPremiumHistory,
+} = require('../../modules/subscriptions');
 const requireAdmin = require('../../middleware/requireAdmin');
 
 // ── Admin panel: paginated post list ────────────────────────────────────────
@@ -51,6 +57,60 @@ router.get('/stats', requireAdmin, async (req, res) => {
 
     statsCache = { data: stats, expiresAt: Date.now() + STATS_TTL_MS };
     res.json({ success: true, stats, cached: false });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Admin panel: Premium (paid / lifetime / earned breakdown + manual grant/revoke) ──
+// Paid & lifetime Premium (`subscriptions` table) are never written to
+// here — only the separate `earned_premium` track is. Every manual
+// adjustment is written to `earned_premium_events` for audit purposes.
+
+// GET /api/admin/premium/:user_id
+router.get('/premium/:user_id', requireAdmin, async (req, res) => {
+  try {
+    const breakdown = await getPremiumBreakdown(req.params.user_id);
+    res.json({ success: true, ...breakdown });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/admin/premium/:user_id/history
+router.get('/premium/:user_id/history', requireAdmin, async (req, res) => {
+  try {
+    const history = await getEarnedPremiumHistory(req.params.user_id, parseInt(req.query.limit) || 20);
+    res.json({ success: true, history });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/premium/grant  { user_id, days, note }
+router.post('/premium/grant', requireAdmin, async (req, res) => {
+  try {
+    const { user_id, days, note } = req.body;
+    if (!user_id || !days || days <= 0) {
+      return res.status(400).json({ error: 'user_id and a positive days value are required' });
+    }
+    const result = await grantEarnedPremium(user_id, Number(days), 'manual', {
+      adminTelegramId: String(req.adminTelegramId),
+      note,
+    });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/premium/revoke  { user_id, note }
+router.post('/premium/revoke', requireAdmin, async (req, res) => {
+  try {
+    const { user_id, note } = req.body;
+    if (!user_id) return res.status(400).json({ error: 'user_id is required' });
+    const result = await revokeEarnedPremium(user_id, String(req.adminTelegramId), note);
+    res.json({ success: true, ...result });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
