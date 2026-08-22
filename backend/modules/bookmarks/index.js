@@ -1,4 +1,5 @@
 const supabase = require('../../supabase');
+const { recordMissionAction } = require('../missions');
 
 async function toggleBookmark(userId, postId) {
   const { data: existing } = await supabase
@@ -17,6 +18,11 @@ async function toggleBookmark(userId, postId) {
 
   await supabase.from('bookmarks')
     .insert({ user_id: userId, post_id: postId });
+
+  recordMissionAction(userId, 'bookmark_post', postId).catch(err =>
+    console.error('[bookmarks] recordMissionAction failed:', err.message)
+  );
+
   return { bookmarked: true };
 }
 
