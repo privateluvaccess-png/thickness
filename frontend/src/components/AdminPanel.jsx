@@ -4,6 +4,7 @@ import {
   getAdminPremiumBreakdown, getAdminPremiumHistory,
   grantAdminPremium, revokeAdminPremium,
   getAdminXp, grantAdminXp,
+  getAdminAdSettings, updateAdminAdSettings,
 } from '../api';
 
 // Foundation panel for the (previously nonexistent) Channel Admin UI.
@@ -111,6 +112,9 @@ export default function AdminPanel({ initData, onClose }) {
                 </div>
               )}
 
+              {/* Ad format toggles */}
+              <AdsSection initData={initData} />
+
               {/* Premium lookup / manual grant-revoke */}
               <PremiumSection initData={initData} />
 
@@ -164,6 +168,78 @@ export default function AdminPanel({ initData, onClose }) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// Ad format toggles — auto-loads on mount (single global row, no
+// per-user lookup needed). Each format is independent; the admin can
+// leave any combination on, including just one.
+function AdsSection({ initData }) {
+  const [settings, setSettings] = useState(null);
+  const [loading, setLoading]   = useState(true);
+  const [busyKey, setBusyKey]   = useState(null);
+  const [error, setError]       = useState('');
+
+  useEffect(() => {
+    getAdminAdSettings(initData)
+      .then(res => setSettings(res.data.settings))
+      .catch(err => setError(err?.response?.data?.error || err.message))
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function toggle(key) {
+    setBusyKey(key);
+    setError('');
+    const next = !settings[key];
+    try {
+      const res = await updateAdminAdSettings(initData, { [key]: next });
+      setSettings(res.data.settings);
+    } catch (err) {
+      setError(err?.response?.data?.error || err.message);
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  const FORMATS = [
+    { key: 'inapp_interstitial_enabled', label: 'In-App Interstitial', hint: 'Auto-scheduled background ad (current default)' },
+    { key: 'rewarded_popup_enabled', label: 'Rewarded Popup', hint: "show_11218209('pop')" },
+    { key: 'rewarded_interstitial_enabled', label: 'Rewarded Interstitial', hint: 'show_11218209()' },
+  ];
+
+  return (
+    <div className="flex flex-col gap-2 bg-zinc-800/50 rounded-xl p-3">
+      <span className="text-gray-400 text-xs font-semibold uppercase">Ad Formats</span>
+      {error && <p className="text-red-400 text-xs">{error}</p>}
+      {loading ? (
+        <p className="text-gray-500 text-xs">Loading...</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {FORMATS.map(f => (
+            <div key={f.key} className="flex items-center justify-between bg-zinc-900 rounded-lg px-3 py-2.5">
+              <div className="min-w-0">
+                <p className="text-white text-sm font-medium">{f.label}</p>
+                <p className="text-gray-500 text-[11px]">{f.hint}</p>
+              </div>
+              <button
+                onClick={() => toggle(f.key)}
+                disabled={busyKey === f.key}
+                className={`flex-shrink-0 w-12 h-7 rounded-full transition-colors relative disabled:opacity-50 ${
+                  settings[f.key] ? 'bg-green-600' : 'bg-zinc-700'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 w-6 h-6 rounded-full bg-white transition-transform ${
+                    settings[f.key] ? 'translate-x-5' : 'translate-x-0.5'
+                  }`}
+                />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
