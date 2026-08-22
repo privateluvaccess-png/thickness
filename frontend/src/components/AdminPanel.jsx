@@ -5,6 +5,8 @@ import {
   grantAdminPremium, revokeAdminPremium,
   getAdminXp, grantAdminXp,
   getAdminAdSettings, updateAdminAdSettings,
+  getAdminGiftHuntSettings, updateAdminGiftHuntSettings,
+  getAdminMissions, createAdminMission, updateAdminMission, deleteAdminMission,
 } from '../api';
 
 // Foundation panel for the (previously nonexistent) Channel Admin UI.
@@ -114,6 +116,12 @@ export default function AdminPanel({ initData, onClose }) {
 
               {/* Ad format toggles */}
               <AdsSection initData={initData} />
+
+              {/* Gift Hunt settings */}
+              <GiftHuntSection initData={initData} />
+
+              {/* Missions manager */}
+              <MissionsSection initData={initData} />
 
               {/* Premium lookup / manual grant-revoke */}
               <PremiumSection initData={initData} />
@@ -274,6 +282,247 @@ function AdsSection({ initData }) {
               className="w-16 bg-zinc-800 text-white text-sm rounded-lg px-2 py-1 text-center outline-none"
             />
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Gift Hunt config — enabled/disabled, required actions, reward days.
+// Progress itself is derived server-side from the XP ledger, so
+// there's nothing to configure here about tracking — just the rules.
+function GiftHuntSection({ initData }) {
+  const [settings, setSettings] = useState(null);
+  const [loading, setLoading]   = useState(true);
+  const [busyKey, setBusyKey]   = useState(null);
+  const [error, setError]       = useState('');
+
+  useEffect(() => {
+    getAdminGiftHuntSettings(initData)
+      .then(res => setSettings(res.data.settings))
+      .catch(err => setError(err?.response?.data?.error || err.message))
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function toggleEnabled() {
+    setBusyKey('enabled');
+    try {
+      const res = await updateAdminGiftHuntSettings(initData, { enabled: !settings.enabled });
+      setSettings(res.data.settings);
+    } catch (err) {
+      setError(err?.response?.data?.error || err.message);
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function updateNumber(key, value) {
+    const num = Number(value);
+    if (!Number.isInteger(num) || num <= 0) return;
+    setBusyKey(key);
+    try {
+      const res = await updateAdminGiftHuntSettings(initData, { [key]: num });
+      setSettings(res.data.settings);
+    } catch (err) {
+      setError(err?.response?.data?.error || err.message);
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2 bg-zinc-800/50 rounded-xl p-3">
+      <span className="text-gray-400 text-xs font-semibold uppercase">Daily Gift Hunt</span>
+      {error && <p className="text-red-400 text-xs">{error}</p>}
+      {loading ? (
+        <p className="text-gray-500 text-xs">Loading...</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between bg-zinc-900 rounded-lg px-3 py-2.5">
+            <span className="text-white text-sm">Enabled</span>
+            <button
+              onClick={toggleEnabled}
+              disabled={busyKey === 'enabled'}
+              className={`w-12 h-7 rounded-full relative disabled:opacity-50 ${settings.enabled ? 'bg-green-600' : 'bg-zinc-700'}`}
+            >
+              <span className={`absolute top-0.5 w-6 h-6 rounded-full bg-white transition-transform ${settings.enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
+          <div className="flex items-center justify-between bg-zinc-900 rounded-lg px-3 py-2.5">
+            <span className="text-white text-sm">Required actions</span>
+            <input
+              type="number" min="1"
+              defaultValue={settings.required_actions}
+              onBlur={e => updateNumber('required_actions', e.target.value)}
+              className="w-16 bg-zinc-800 text-white text-sm rounded-lg px-2 py-1 text-center outline-none"
+            />
+          </div>
+          <div className="flex items-center justify-between bg-zinc-900 rounded-lg px-3 py-2.5">
+            <span className="text-white text-sm">Reward (days Premium)</span>
+            <input
+              type="number" min="1"
+              defaultValue={settings.reward_days}
+              onBlur={e => updateNumber('reward_days', e.target.value)}
+              className="w-16 bg-zinc-800 text-white text-sm rounded-lg px-2 py-1 text-center outline-none"
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Missions manager — list, add, toggle active, delete. Note:
+// requirementType must match a type the backend actually tracks
+// (watch_ad, like_post, bookmark_post) or progress will never move.
+function MissionsSection({ initData }) {
+  const [missions, setMissions] = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState('');
+  const [showAdd, setShowAdd]   = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newType, setNewType]   = useState('watch_ad');
+  const [newCount, setNewCount] = useState('2');
+  const [newXp, setNewXp]       = useState('15');
+  const [busy, setBusy]         = useState(false);
+
+  function load() {
+    setLoading(true);
+    getAdminMissions(initData)
+      .then(res => setMissions(res.data.missions || []))
+      .catch(err => setError(err?.response?.data?.error || err.message))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, []);
+
+  async function toggleActive(mission) {
+    setBusy(true);
+    try {
+      await updateAdminMission(initData, mission.id, { active: !mission.active });
+      load();
+    } catch (err) {
+      setError(err?.response?.data?.error || err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDelete(id) {
+    if (!confirm('Delete this mission?')) return;
+    setBusy(true);
+    try {
+      await deleteAdminMission(initData, id);
+      load();
+    } catch (err) {
+      setError(err?.response?.data?.error || err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleAdd() {
+    if (!newTitle.trim()) return;
+    setBusy(true);
+    try {
+      await createAdminMission(initData, {
+        title: newTitle.trim(),
+        requirementType: newType,
+        requirementCount: Number(newCount) || 1,
+        xpReward: Number(newXp) || 10,
+      });
+      setNewTitle('');
+      setShowAdd(false);
+      load();
+    } catch (err) {
+      setError(err?.response?.data?.error || err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2 bg-zinc-800/50 rounded-xl p-3">
+      <div className="flex items-center justify-between">
+        <span className="text-gray-400 text-xs font-semibold uppercase">Daily Missions</span>
+        <button onClick={() => setShowAdd(v => !v)} className="text-gray-400 text-xs">
+          {showAdd ? 'Cancel' : '+ Add'}
+        </button>
+      </div>
+      {error && <p className="text-red-400 text-xs">{error}</p>}
+
+      {showAdd && (
+        <div className="flex flex-col gap-2 bg-zinc-900 rounded-lg p-2.5">
+          <input
+            value={newTitle}
+            onChange={e => setNewTitle(e.target.value)}
+            placeholder="Mission title"
+            className="bg-zinc-800 text-white text-sm rounded-lg px-3 py-2 outline-none"
+          />
+          <select
+            value={newType}
+            onChange={e => setNewType(e.target.value)}
+            className="bg-zinc-800 text-white text-sm rounded-lg px-3 py-2 outline-none"
+          >
+            <option value="watch_ad">Watch rewarded ads</option>
+            <option value="like_post">Like posts</option>
+            <option value="bookmark_post">Bookmark posts</option>
+          </select>
+          <div className="flex gap-2">
+            <input
+              type="number" min="1" value={newCount}
+              onChange={e => setNewCount(e.target.value)}
+              placeholder="Count"
+              className="flex-1 bg-zinc-800 text-white text-sm rounded-lg px-3 py-2 outline-none"
+            />
+            <input
+              type="number" min="1" value={newXp}
+              onChange={e => setNewXp(e.target.value)}
+              placeholder="XP reward"
+              className="flex-1 bg-zinc-800 text-white text-sm rounded-lg px-3 py-2 outline-none"
+            />
+          </div>
+          <button
+            onClick={handleAdd}
+            disabled={busy || !newTitle.trim()}
+            className="w-full py-2 rounded-lg bg-green-600/20 text-green-400 text-sm font-bold disabled:opacity-50"
+          >
+            Add Mission
+          </button>
+        </div>
+      )}
+
+      {loading ? (
+        <p className="text-gray-500 text-xs">Loading...</p>
+      ) : missions.length === 0 ? (
+        <p className="text-gray-500 text-xs">No missions yet.</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {missions.map(m => (
+            <div key={m.id} className="flex items-center justify-between bg-zinc-900 rounded-lg px-3 py-2.5">
+              <div className="min-w-0">
+                <p className={`text-sm font-medium ${m.active ? 'text-white' : 'text-gray-500 line-through'}`}>{m.title}</p>
+                <p className="text-gray-500 text-[11px]">{m.requirement_type} · {m.requirement_count}x · +{m.xp_reward} XP</p>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  onClick={() => toggleActive(m)}
+                  disabled={busy}
+                  className={`w-10 h-6 rounded-full relative disabled:opacity-50 ${m.active ? 'bg-green-600' : 'bg-zinc-700'}`}
+                >
+                  <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${m.active ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                </button>
+                <button
+                  onClick={() => handleDelete(m.id)}
+                  disabled={busy}
+                  className="text-red-400 text-xs font-bold"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
