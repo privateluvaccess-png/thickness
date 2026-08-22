@@ -60,3 +60,26 @@ export const getAdminAdSettings = (initData) =>
   API.get('/api/admin/ads/settings', { headers: { 'x-telegram-init-data': initData } });
 export const updateAdminAdSettings = (initData, settings) =>
   API.post('/api/admin/ads/settings', settings, { headers: { 'x-telegram-init-data': initData } });
+
+// Gift Hunt — public status/claim
+export const getGiftHuntStatus = (userId) => API.get(`/api/gift-hunt/status/${userId}`);
+export const claimGiftHunt = (userId) => API.post('/api/gift-hunt/claim', { user_id: userId });
+
+// Gift Hunt — admin settings
+export const getAdminGiftHuntSettings = (initData) =>
+  API.get('/api/admin/gift-hunt/settings', { headers: { 'x-telegram-init-data': initData } });
+export const updateAdminGiftHuntSettings = (initData, settings) =>
+  API.post('/api/admin/gift-hunt/settings', settings, { headers: { 'x-telegram-init-data': initData } });
+
+// Missions — public read
+export const getMissionsToday = (userId) => API.get(`/api/missions/today/${userId}`);
+
+// Missions — admin CRUD
+export const getAdminMissions = (initData) =>
+  API.get('/api/admin/missions', { headers: { 'x-telegram-init-data': initData } });
+export const createAdminMission = (initData, mission) =>
+  API.post('/api/admin/missions', mission, { headers: { 'x-telegram-init-data': initData } });
+export const updateAdminMission = (initData, id, fields) =>
+  API.patch(`/api/admin/missions/${id}`, fields, { headers: { 'x-telegram-init-data': initData } });
+export const deleteAdminMission = (initData, id) =>
+  API.delete(`/api/admin/missions/${id}`, { headers: { 'x-telegram-init-data': initData } });
