@@ -52,3 +52,11 @@ export const grantAdminXp = (initData, userId, points, note) =>
 
 // Read a user's own XP summary (used by the future Level/XP display)
 export const getMyXp = (userId) => API.get(`/api/xp/${userId}`);
+
+// Ad format settings — public read (frontend decides which show_11218209
+// calls to make); admin write (toggle formats on/off).
+export const getAdSettings = () => API.get('/api/ads/settings');
+export const getAdminAdSettings = (initData) =>
+  API.get('/api/admin/ads/settings', { headers: { 'x-telegram-init-data': initData } });
+export const updateAdminAdSettings = (initData, settings) =>
+  API.post('/api/admin/ads/settings', settings, { headers: { 'x-telegram-init-data': initData } });
