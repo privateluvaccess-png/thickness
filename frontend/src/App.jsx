@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
 import Feed from './components/Feed';
 import SubscriptionBadge from './components/SubscriptionBadge';
-import { loginUser, getSubscription } from './api';
+import { loginUser, getSubscription, getAdSettings } from './api';
 import { languageLabels, languageOrder } from './i18n/translations';
 import logo from './assets/logo.webp';
 import ProfileButton from './components/ProfileButton';
@@ -180,22 +180,34 @@ export default function App() {
   // admin call, so this is a proof of identity, not a bearer secret.
   const [initData, setInitData]     = useState(null);
 
-  // Start the in-app interstitial ad session once, globally.
-  // This replaces the old per-tap popup: the SDK now manages its own
-  // schedule (frequency / capping / interval / timeout) automatically.
+  // Start the in-app interstitial ad session once, globally — but only
+  // if the admin currently has this format enabled. Falls back to
+  // "on" if the settings fetch fails, matching the previous behavior
+  // (better than silently going dark if the backend is briefly down).
   useEffect(() => {
-    if (typeof show_11218209 === 'function') {
-      show_11218209({
-        type: 'inApp',
-        inAppSettings: {
-          frequency: 2,
-          capping: 0.1,
-          interval: 30,
-          timeout: 5,
-          everyPage: false,
-        },
-      }).catch(() => {});
+    async function maybeStartInAppAd() {
+      let enabled = true;
+      try {
+        const res = await getAdSettings();
+        enabled = res.data.settings?.inapp_interstitial_enabled !== false;
+      } catch {
+        // keep default (enabled)
+      }
+
+      if (enabled && typeof show_11218209 === 'function') {
+        show_11218209({
+          type: 'inApp',
+          inAppSettings: {
+            frequency: 2,
+            capping: 0.1,
+            interval: 30,
+            timeout: 5,
+            everyPage: false,
+          },
+        }).catch(() => {});
+      }
     }
+    maybeStartInAppAd();
   }, []);
 
   useEffect(() => {
