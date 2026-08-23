@@ -40,15 +40,16 @@ async function processMonetagPostback({ ymid, telegramIdFromMacro, format, event
     return { granted: false, reason: 'missing ymid or resolvable user id' };
   }
 
-  // Only a confirmed-billable event ever grants a reward. This
-  // specific Monetag product (Telegram Mini App postback) reports
-  // this as the literal string "yes" / "no" — NOT "valued", which is
-  // what their general web-widget docs describe. Confirm against your
-  // own postback config screen if this ever seems to stop working.
-  const isRewardable = rewardEventType === 'yes';
+  // Only a confirmed-billable event ever grants a reward. Confirmed
+  // directly from live production logs (Aug 23) that this zone sends
+  // the literal string "valued" (not "not_valued") for a real reward
+  // event — the Monetag dashboard's own description text ("yes"/"no")
+  // was simply inaccurate for this product. Trust the logs over the
+  // dashboard copy if this ever seems to stop working again.
+  const isRewardable = rewardEventType === 'valued';
   if (!isRewardable) {
     await _recordEvent({ userId, ymid, format, eventType, rewardEventType, estimatedPrice, points: null });
-    return { granted: false, reason: `reward_event_type was "${rewardEventType}", not "yes"` };
+    return { granted: false, reason: `reward_event_type was "${rewardEventType}", not "valued"` };
   }
 
   const settings = await getAdSettings();
