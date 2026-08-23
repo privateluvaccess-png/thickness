@@ -11,6 +11,7 @@ import {
   getAdminLevelSettings, updateAdminLevelSettings,
   getAdminNewUserSettings, updateAdminNewUserSettings,
   setAdminPostAudience, setAdminPostPin,
+  getAdminWeeklyChallengeSettings, updateAdminWeeklyChallengeSettings, getAdminWeeklyChallengeResults,
 } from '../api';
 
 // Foundation panel for the (previously nonexistent) Channel Admin UI.
@@ -123,6 +124,9 @@ export default function AdminPanel({ initData, onClose }) {
 
               {/* Gift Hunt settings */}
               <GiftHuntSection initData={initData} />
+
+              {/* Weekly Challenge settings + recent winners */}
+              <WeeklyChallengeSection initData={initData} />
 
               {/* Missions manager */}
               <MissionsSection initData={initData} />
@@ -386,6 +390,106 @@ function GiftHuntSection({ initData }) {
               className="w-16 bg-zinc-800 text-white text-sm rounded-lg px-2 py-1 text-center outline-none"
             />
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Weekly Challenge config — reward days for 1st/2nd/3rd, plus a peek
+// at recent settled weeks. Settlement itself happens automatically
+// (lazily, on leaderboard load) — nothing to trigger manually here.
+function WeeklyChallengeSection({ initData }) {
+  const [settings, setSettings] = useState(null);
+  const [results, setResults]   = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [busyKey, setBusyKey]   = useState(null);
+  const [error, setError]       = useState('');
+
+  useEffect(() => {
+    Promise.all([
+      getAdminWeeklyChallengeSettings(initData),
+      getAdminWeeklyChallengeResults(initData),
+    ])
+      .then(([settingsRes, resultsRes]) => {
+        setSettings(settingsRes.data.settings);
+        setResults(resultsRes.data.results || []);
+      })
+      .catch(err => setError(err?.response?.data?.error || err.message))
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function toggleEnabled() {
+    setBusyKey('enabled');
+    try {
+      const res = await updateAdminWeeklyChallengeSettings(initData, { enabled: !settings.enabled });
+      setSettings(res.data.settings);
+    } catch (err) {
+      setError(err?.response?.data?.error || err.message);
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function updateDays(key, value) {
+    const num = Number(value);
+    if (!Number.isInteger(num) || num <= 0) return;
+    setBusyKey(key);
+    try {
+      const res = await updateAdminWeeklyChallengeSettings(initData, { [key]: num });
+      setSettings(res.data.settings);
+    } catch (err) {
+      setError(err?.response?.data?.error || err.message);
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2 bg-zinc-800/50 rounded-xl p-3">
+      <span className="text-gray-400 text-xs font-semibold uppercase">Weekly Challenge</span>
+      {error && <p className="text-red-400 text-xs">{error}</p>}
+      {loading ? (
+        <p className="text-gray-500 text-xs">Loading...</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between bg-zinc-900 rounded-lg px-3 py-2.5">
+            <span className="text-white text-sm">Enabled</span>
+            <button
+              onClick={toggleEnabled}
+              disabled={busyKey === 'enabled'}
+              className={`w-12 h-7 rounded-full relative disabled:opacity-50 ${settings.enabled ? 'bg-green-600' : 'bg-zinc-700'}`}
+            >
+              <span className={`absolute top-0.5 w-6 h-6 rounded-full bg-white transition-transform ${settings.enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
+          {[
+            ['first_place_days', '🥇 1st place (days)'],
+            ['second_place_days', '🥈 2nd place (days)'],
+            ['third_place_days', '🥉 3rd place (days)'],
+          ].map(([key, label]) => (
+            <div key={key} className="flex items-center justify-between bg-zinc-900 rounded-lg px-3 py-2.5">
+              <span className="text-white text-sm">{label}</span>
+              <input
+                type="number" min="1"
+                defaultValue={settings[key]}
+                onBlur={e => updateDays(key, e.target.value)}
+                className="w-16 bg-zinc-800 text-white text-sm rounded-lg px-2 py-1 text-center outline-none"
+              />
+            </div>
+          ))}
+
+          {results.length > 0 && (
+            <div className="flex flex-col gap-1 mt-1">
+              <span className="text-gray-500 text-xs">Recent winners</span>
+              {results.map(r => (
+                <div key={r.id} className="text-xs text-gray-400 bg-zinc-900 rounded-lg px-3 py-2">
+                  {r.week_key} · #{r.rank} · user {r.user_id} · {r.xp} XP · +{r.reward_days}d Premium
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
