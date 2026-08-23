@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import PostCard from './PostCard';
 import PremiumGate from './PremiumGate';
-import { getFreeFeed, getFullFeed, getActiveLink } from '../api';
+import { getFreeFeed, getFullFeed, getActiveLink, getPinnedNewUserPosts } from '../api';
 import { useLanguage } from '../i18n/LanguageContext';
 import giftBox from '../assets/adbox.webp';
 
@@ -279,7 +279,7 @@ function Pagination({ currentPage, totalPages, onPageChange }) {
   );
 }
 
-export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, adminSecret, navigateToPostId, onNavigated }) {
+export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, initData, navigateToPostId, onNavigated }) {
   const { t } = useLanguage();
   const [freePosts,    setFreePosts]    = useState([]);
   const [premiumPosts, setPremiumPosts] = useState([]);
@@ -288,6 +288,7 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, admin
   const [activeTab,    setActiveTab]    = useState('free');
   const [overlayUrl,   setOverlayUrl]   = useState(null);
   const [currentPage,  setCurrentPage]  = useState(1);
+  const [pinnedPosts,  setPinnedPosts]  = useState([]);
 
   // Scroll-to-unlock teaser feature (free users only)
   const TEASER_THRESHOLD = 7;
@@ -357,6 +358,17 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, admin
     }
     fetchLink();
   }, []);
+
+  // Onboarding posts an admin has pinned — server already checks
+  // whether this user is still within their new-user window and
+  // returns an empty list otherwise, so no client-side eligibility
+  // logic needed here.
+  useEffect(() => {
+    if (!telegramId) return;
+    getPinnedNewUserPosts(telegramId)
+      .then(res => setPinnedPosts(res.data.posts || []))
+      .catch(() => {});
+  }, [telegramId]);
 
   function handleDeleted(postId) {
     setFreePosts(prev => prev.filter(p => p.id !== postId));
@@ -440,6 +452,23 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, admin
         />
       )}
 
+      {pinnedPosts.length > 0 && (
+        <div className="px-4 pt-2 pb-1 flex flex-col gap-2">
+          {pinnedPosts.map(post => (
+            <button
+              key={post.id}
+              onClick={() => postRefs.current[post.id]?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+              className="w-full text-left bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2.5 flex items-center gap-2"
+            >
+              <span className="text-amber-400 text-sm">📌</span>
+              <span className="text-amber-200 text-sm font-medium truncate">
+                {post.caption || 'Welcome post'}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="flex border-b border-border mb-4">
         <button
           onClick={() => setActiveTab('free')}
@@ -472,7 +501,7 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, admin
               userId={telegramId}
               onLockTap={() => setShowGate(true)}
               isAdmin={isAdmin}
-              adminSecret={adminSecret}
+              initData={initData}
               onDeleted={handleDeleted}
               postRef={el => { if (el) { el.dataset.postId = post.id; postRefs.current[post.id] = el; } }}
               adUrl={overlayUrl}
