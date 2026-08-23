@@ -7,6 +7,10 @@ import {
   getAdminAdSettings, updateAdminAdSettings,
   getAdminGiftHuntSettings, updateAdminGiftHuntSettings,
   getAdminMissions, createAdminMission, updateAdminMission, deleteAdminMission,
+  getAdminStreakMilestones, createAdminStreakMilestone, updateAdminStreakMilestone, deleteAdminStreakMilestone,
+  getAdminLevelSettings, updateAdminLevelSettings,
+  getAdminNewUserSettings, updateAdminNewUserSettings,
+  setAdminPostAudience, setAdminPostPin,
 } from '../api';
 
 // Foundation panel for the (previously nonexistent) Channel Admin UI.
@@ -123,6 +127,15 @@ export default function AdminPanel({ initData, onClose }) {
               {/* Missions manager */}
               <MissionsSection initData={initData} />
 
+              {/* Streak milestones */}
+              <StreaksSection initData={initData} />
+
+              {/* Level curve settings */}
+              <LevelsSection initData={initData} />
+
+              {/* New User settings */}
+              <NewUserSection initData={initData} />
+
               {/* Premium lookup / manual grant-revoke */}
               <PremiumSection initData={initData} />
 
@@ -138,26 +151,32 @@ export default function AdminPanel({ initData, onClose }) {
                   posts.map(post => (
                     <div
                       key={post.id}
-                      className="flex items-center justify-between gap-3 bg-zinc-800 rounded-xl px-3 py-2"
+                      className="flex flex-col gap-2 bg-zinc-800 rounded-xl px-3 py-2"
                     >
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm text-gray-300 truncate">
-                          {post.caption || '(no caption)'}
-                        </p>
-                        <p className="text-xs text-gray-600 mt-0.5">
-                          <span className={post.tier === 'premium' ? 'text-amber-400' : 'text-green-400'}>
-                            {post.tier === 'premium' ? '⭐ Premium' : 'Free'}
-                          </span>
-                          {' · '}{post.type}{' · '}
-                          {new Date(post.created_at).toLocaleDateString()}
-                        </p>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm text-gray-300 truncate">
+                            {post.caption || '(no caption)'}
+                          </p>
+                          <p className="text-xs text-gray-600 mt-0.5">
+                            <span className={post.tier === 'premium' ? 'text-amber-400' : 'text-green-400'}>
+                              {post.tier === 'premium' ? '⭐ Premium' : 'Free'}
+                            </span>
+                            {' · '}{post.type}{' · '}
+                            {new Date(post.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleDelete(post.id)}
+                          className="flex-shrink-0 bg-red-600/20 hover:bg-red-600/40 text-red-400 text-xs font-bold px-3 py-1.5 rounded-full"
+                        >
+                          🗑 Delete
+                        </button>
                       </div>
-                      <button
-                        onClick={() => handleDelete(post.id)}
-                        className="flex-shrink-0 bg-red-600/20 hover:bg-red-600/40 text-red-400 text-xs font-bold px-3 py-1.5 rounded-full"
-                      >
-                        🗑 Delete
-                      </button>
+
+                      <PostAudiencePinControls initData={initData} post={post} onUpdated={updated => {
+                        setPosts(prev => prev.map(p => (p.id === updated.id ? { ...p, ...updated } : p)));
+                      }} />
                     </div>
                   ))
                 )}
@@ -529,6 +548,263 @@ function MissionsSection({ initData }) {
   );
 }
 
+// Streak milestones manager — same list/add/toggle/delete pattern as
+// Missions. XP rewards here award through the same ledger, tagged
+// with source 'streak_milestone'.
+function StreaksSection({ initData }) {
+  const [milestones, setMilestones] = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState('');
+  const [showAdd, setShowAdd]       = useState(false);
+  const [newDays, setNewDays]       = useState('7');
+  const [newXp, setNewXp]           = useState('50');
+  const [newBadge, setNewBadge]     = useState('');
+  const [busy, setBusy]             = useState(false);
+
+  function load() {
+    setLoading(true);
+    getAdminStreakMilestones(initData)
+      .then(res => setMilestones(res.data.milestones || []))
+      .catch(err => setError(err?.response?.data?.error || err.message))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, []);
+
+  async function toggleActive(m) {
+    setBusy(true);
+    try {
+      await updateAdminStreakMilestone(initData, m.id, { active: !m.active });
+      load();
+    } catch (err) {
+      setError(err?.response?.data?.error || err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDelete(id) {
+    if (!confirm('Delete this milestone?')) return;
+    setBusy(true);
+    try {
+      await deleteAdminStreakMilestone(initData, id);
+      load();
+    } catch (err) {
+      setError(err?.response?.data?.error || err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleAdd() {
+    if (!newDays) return;
+    setBusy(true);
+    try {
+      await createAdminStreakMilestone(initData, {
+        dayCount: Number(newDays),
+        xpReward: Number(newXp) || 0,
+        badgeTitle: newBadge.trim() || null,
+      });
+      setNewBadge('');
+      setShowAdd(false);
+      load();
+    } catch (err) {
+      setError(err?.response?.data?.error || err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2 bg-zinc-800/50 rounded-xl p-3">
+      <div className="flex items-center justify-between">
+        <span className="text-gray-400 text-xs font-semibold uppercase">Streak Milestones</span>
+        <button onClick={() => setShowAdd(v => !v)} className="text-gray-400 text-xs">
+          {showAdd ? 'Cancel' : '+ Add'}
+        </button>
+      </div>
+      {error && <p className="text-red-400 text-xs">{error}</p>}
+
+      {showAdd && (
+        <div className="flex flex-col gap-2 bg-zinc-900 rounded-lg p-2.5">
+          <div className="flex gap-2">
+            <input
+              type="number" min="1" value={newDays}
+              onChange={e => setNewDays(e.target.value)}
+              placeholder="Day count"
+              className="flex-1 bg-zinc-800 text-white text-sm rounded-lg px-3 py-2 outline-none"
+            />
+            <input
+              type="number" min="0" value={newXp}
+              onChange={e => setNewXp(e.target.value)}
+              placeholder="XP reward"
+              className="flex-1 bg-zinc-800 text-white text-sm rounded-lg px-3 py-2 outline-none"
+            />
+          </div>
+          <input
+            value={newBadge}
+            onChange={e => setNewBadge(e.target.value)}
+            placeholder="Badge title (optional)"
+            className="bg-zinc-800 text-white text-sm rounded-lg px-3 py-2 outline-none"
+          />
+          <button
+            onClick={handleAdd}
+            disabled={busy || !newDays}
+            className="w-full py-2 rounded-lg bg-green-600/20 text-green-400 text-sm font-bold disabled:opacity-50"
+          >
+            Add Milestone
+          </button>
+        </div>
+      )}
+
+      {loading ? (
+        <p className="text-gray-500 text-xs">Loading...</p>
+      ) : milestones.length === 0 ? (
+        <p className="text-gray-500 text-xs">No milestones yet.</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {milestones.map(m => (
+            <div key={m.id} className="flex items-center justify-between bg-zinc-900 rounded-lg px-3 py-2.5">
+              <div className="min-w-0">
+                <p className={`text-sm font-medium ${m.active ? 'text-white' : 'text-gray-500 line-through'}`}>
+                  Day {m.day_count}{m.badge_title ? ` · ${m.badge_title}` : ''}
+                </p>
+                <p className="text-gray-500 text-[11px]">+{m.xp_reward} XP</p>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  onClick={() => toggleActive(m)}
+                  disabled={busy}
+                  className={`w-10 h-6 rounded-full relative disabled:opacity-50 ${m.active ? 'bg-green-600' : 'bg-zinc-700'}`}
+                >
+                  <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${m.active ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                </button>
+                <button onClick={() => handleDelete(m.id)} disabled={busy} className="text-red-400 text-xs font-bold">
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Level curve settings — two numbers define the whole curve, no
+// per-level table to manage.
+function LevelsSection({ initData }) {
+  const [settings, setSettings] = useState(null);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState('');
+  const [busyKey, setBusyKey]   = useState(null);
+
+  useEffect(() => {
+    getAdminLevelSettings(initData)
+      .then(res => setSettings(res.data.settings))
+      .catch(err => setError(err?.response?.data?.error || err.message))
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function updateNumber(key, value) {
+    const num = Number(value);
+    if (!Number.isInteger(num) || num < 0) return;
+    setBusyKey(key);
+    try {
+      const res = await updateAdminLevelSettings(initData, { [key]: num });
+      setSettings(res.data.settings);
+    } catch (err) {
+      setError(err?.response?.data?.error || err.message);
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2 bg-zinc-800/50 rounded-xl p-3">
+      <span className="text-gray-400 text-xs font-semibold uppercase">Level Curve</span>
+      {error && <p className="text-red-400 text-xs">{error}</p>}
+      {loading ? (
+        <p className="text-gray-500 text-xs">Loading...</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between bg-zinc-900 rounded-lg px-3 py-2.5">
+            <span className="text-white text-sm">Base XP (Level 1→2)</span>
+            <input
+              type="number" min="1"
+              defaultValue={settings.xp_base}
+              onBlur={e => updateNumber('xp_base', e.target.value)}
+              className="w-20 bg-zinc-800 text-white text-sm rounded-lg px-2 py-1 text-center outline-none"
+            />
+          </div>
+          <div className="flex items-center justify-between bg-zinc-900 rounded-lg px-3 py-2.5">
+            <span className="text-white text-sm">XP increment per level</span>
+            <input
+              type="number" min="0"
+              defaultValue={settings.xp_increment}
+              onBlur={e => updateNumber('xp_increment', e.target.value)}
+              className="w-20 bg-zinc-800 text-white text-sm rounded-lg px-2 py-1 text-center outline-none"
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// New User window — one number, how many days after signup a user
+// counts as "new" for audience targeting and pinned onboarding posts.
+function NewUserSection({ initData }) {
+  const [settings, setSettings] = useState(null);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState('');
+  const [busy, setBusy]         = useState(false);
+
+  useEffect(() => {
+    getAdminNewUserSettings(initData)
+      .then(res => setSettings(res.data.settings))
+      .catch(err => setError(err?.response?.data?.error || err.message))
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function updateDays(value) {
+    const num = Number(value);
+    if (!Number.isInteger(num) || num <= 0) return;
+    setBusy(true);
+    try {
+      const res = await updateAdminNewUserSettings(initData, { duration_days: num });
+      setSettings(res.data.settings);
+    } catch (err) {
+      setError(err?.response?.data?.error || err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2 bg-zinc-800/50 rounded-xl p-3">
+      <span className="text-gray-400 text-xs font-semibold uppercase">New User Window</span>
+      {error && <p className="text-red-400 text-xs">{error}</p>}
+      {loading ? (
+        <p className="text-gray-500 text-xs">Loading...</p>
+      ) : (
+        <div className="flex items-center justify-between bg-zinc-900 rounded-lg px-3 py-2.5">
+          <span className="text-white text-sm">New user for (days)</span>
+          <input
+            type="number" min="1"
+            defaultValue={settings.duration_days}
+            onBlur={e => updateDays(e.target.value)}
+            disabled={busy}
+            className="w-20 bg-zinc-800 text-white text-sm rounded-lg px-2 py-1 text-center outline-none disabled:opacity-50"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Looks up a single user's Premium breakdown (paid / lifetime / earned,
 // kept as separate windows — never merged) and lets an admin manually
 // grant or revoke earned Premium. Only queries on explicit action
@@ -818,6 +1094,88 @@ function XpSection({ initData }) {
             </div>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+// Inline audience + pin controls for one post row in the admin list.
+// Audience is orthogonal to `tier` (free/premium feed tab) — a post
+// can be free-tier AND new-users-only, for example.
+function PostAudiencePinControls({ initData, post, onUpdated }) {
+  const [busy, setBusy] = useState(false);
+
+  async function changeAudience(e) {
+    const audience = e.target.value;
+    setBusy(true);
+    try {
+      const res = await setAdminPostAudience(initData, post.id, audience);
+      onUpdated(res.data.post);
+    } catch (err) {
+      alert('Failed: ' + (err?.response?.data?.error || err.message));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function togglePin() {
+    setBusy(true);
+    try {
+      const res = await setAdminPostPin(initData, post.id, !post.pinned_for_new_users, post.pin_priority || 0);
+      onUpdated(res.data.post);
+    } catch (err) {
+      alert('Failed: ' + (err?.response?.data?.error || err.message));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function changePriority(e) {
+    const priority = Number(e.target.value);
+    if (!Number.isInteger(priority)) return;
+    setBusy(true);
+    try {
+      const res = await setAdminPostPin(initData, post.id, post.pinned_for_new_users, priority);
+      onUpdated(res.data.post);
+    } catch (err) {
+      alert('Failed: ' + (err?.response?.data?.error || err.message));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <select
+        value={post.audience || 'everyone'}
+        onChange={changeAudience}
+        disabled={busy}
+        className="bg-zinc-900 text-gray-300 text-xs rounded-lg px-2 py-1.5 outline-none disabled:opacity-50"
+      >
+        <option value="everyone">Everyone</option>
+        <option value="new_users">New Users</option>
+        <option value="premium">Premium</option>
+      </select>
+
+      <button
+        onClick={togglePin}
+        disabled={busy}
+        className={`text-xs font-medium px-2 py-1.5 rounded-lg disabled:opacity-50 ${
+          post.pinned_for_new_users ? 'bg-amber-500/20 text-amber-400' : 'bg-zinc-900 text-gray-400'
+        }`}
+      >
+        📌 {post.pinned_for_new_users ? 'Pinned' : 'Pin for New Users'}
+      </button>
+
+      {post.pinned_for_new_users && (
+        <input
+          type="number" min="0"
+          defaultValue={post.pin_priority || 0}
+          onBlur={changePriority}
+          disabled={busy}
+          title="Priority (lower shows first)"
+          className="w-14 bg-zinc-900 text-gray-300 text-xs rounded-lg px-2 py-1.5 text-center outline-none disabled:opacity-50"
+        />
       )}
     </div>
   );
