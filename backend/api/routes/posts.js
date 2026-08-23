@@ -1,5 +1,8 @@
 const router = require('express').Router();
-const { getFeed, getPostById, deletePostById } = require('../../modules/posts');
+const { getFeed, getPostById, deletePostById, getPinnedNewUserPosts } = require('../../modules/posts');
+const { getUserById } = require('../../modules/users');
+const { checkSubscription } = require('../../modules/subscriptions');
+const { isNewUser } = require('../../modules/newUser');
 const requireAdmin = require('../../middleware/requireAdmin');
 
 // Proxy Telegram file so the frontend can display images/videos.
@@ -54,7 +57,39 @@ router.get('/media/:file_id', async (req, res) => {
 router.get('/feed', async (req, res) => {
   try {
     const { tier, user_id } = req.query;
-    const posts = await getFeed(tier && tier !== 'all' ? tier : null, user_id || null);
+
+    let newUserFlag = false;
+    let premiumFlag = false;
+    if (user_id) {
+      const [user, subscription] = await Promise.all([
+        getUserById(user_id),
+        checkSubscription(user_id),
+      ]);
+      newUserFlag = await isNewUser(user);
+      premiumFlag = !!subscription.isPremium;
+    }
+
+    const posts = await getFeed(
+      tier && tier !== 'all' ? tier : null,
+      user_id || null,
+      { isNewUser: newUserFlag, isPremiumUser: premiumFlag }
+    );
+    res.json({ success: true, posts });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// New-user onboarding posts — any existing post the admin has pinned,
+// shown above the regular feed only to users still inside their
+// new-user window.
+router.get('/pinned-new-user/:user_id', async (req, res) => {
+  try {
+    const user = await getUserById(req.params.user_id);
+    const eligible = await isNewUser(user);
+    if (!eligible) return res.json({ success: true, posts: [] });
+
+    const posts = await getPinnedNewUserPosts();
     res.json({ success: true, posts });
   } catch (err) {
     res.status(500).json({ error: err.message });
