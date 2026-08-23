@@ -8,19 +8,28 @@ import { languageLabels, languageOrder } from './i18n/translations';
 import logo from './assets/logo.webp';
 import ProfileButton from './components/ProfileButton';
 
-function AppInner({ user, isPremium, setIsPremium, expiresAt, devBoostUnlocked, setDevBoost, initData, sharedPostId }) {
+function AppInner({
+  user,
+  isPremium,
+  setIsPremium,
+  expiresAt,
+  devBoostUnlocked,
+  setDevBoost,
+  initData,
+  sharedPostId
+}) {
   const { lang, setLang } = useLanguage();
-  const [isDark, setIsDark]             = useState(true);
+
+  const [isDark, setIsDark] = useState(true);
   const [showLangMenu, setShowLangMenu] = useState(false);
   const [navigateToPostId, setNavigateToPostId] = useState(null);
   const [showDevPrompt, setShowDevPrompt] = useState(false);
-  const [devPassword, setDevPassword]   = useState('');
-  const [devError, setDevError]         = useState('');
-  const [activeSection, setActiveSection] = useState('feed'); // 'feed' | 'challenge'
+  const [devPassword, setDevPassword] = useState('');
+  const [devError, setDevError] = useState('');
+  const [activeSection, setActiveSection] = useState('feed');
 
   // If the app was opened via a shared-post link, make sure we're on
-  // the Feed tab (not wherever the user last left off) and tell Feed
-  // to scroll to that post once it's loaded.
+  // the Feed tab and tell Feed to scroll to that post once loaded.
   useEffect(() => {
     if (sharedPostId) {
       setActiveSection('feed');
@@ -28,8 +37,11 @@ function AppInner({ user, isPremium, setIsPremium, expiresAt, devBoostUnlocked, 
     }
   }, [sharedPostId]);
 
-  const DEV_PASSWORD = import.meta.env.VITE_DEV_PASSWORD || 'thickness_dev';
-  const ADMIN_TG_ID  = import.meta.env.VITE_ADMIN_TELEGRAM_ID;
+  const DEV_PASSWORD =
+    import.meta.env.VITE_DEV_PASSWORD || 'thickness_dev';
+
+  const ADMIN_TG_ID =
+    import.meta.env.VITE_ADMIN_TELEGRAM_ID;
 
   const tapCount = useRef(0);
   const tapTimer = useRef(null);
@@ -44,14 +56,18 @@ function AppInner({ user, isPremium, setIsPremium, expiresAt, devBoostUnlocked, 
 
   function handleLogoTap() {
     tapCount.current += 1;
+
     clearTimeout(tapTimer.current);
+
     if (tapCount.current >= 7) {
       tapCount.current = 0;
       setShowDevPrompt(true);
       setDevPassword('');
       setDevError('');
     } else {
-      tapTimer.current = setTimeout(() => { tapCount.current = 0; }, 2000);
+      tapTimer.current = setTimeout(() => {
+        tapCount.current = 0;
+      }, 2000);
     }
   }
 
@@ -66,18 +82,36 @@ function AppInner({ user, isPremium, setIsPremium, expiresAt, devBoostUnlocked, 
     }
   }
 
-  const isAdmin = ADMIN_TG_ID && String(user?.telegram_id) === String(ADMIN_TG_ID);
+  const isAdmin =
+    ADMIN_TG_ID &&
+    String(user?.telegram_id) === String(ADMIN_TG_ID);
 
   return (
-    <div className="flex flex-col bg-dark text-white max-w-md mx-auto" style={{ height: '100dvh', overflow: 'hidden' }}>
+    <div
+      className="flex flex-col bg-dark text-white max-w-md mx-auto"
+      style={{
+        height: '100dvh',
+        overflow: 'hidden'
+      }}
+    >
 
-      {/* Header — fixed height, no overflow */}
-      <div className="flex items-center justify-between px-4 border-b border-border relative flex-shrink-0" style={{ height: 56 }}>
+      {/* Header */}
+      <div
+        className="flex items-center justify-between px-4 border-b border-border relative flex-shrink-0"
+        style={{ height: 56 }}
+      >
         <img
           src={logo}
           alt="Thickness"
           onClick={handleLogoTap}
-          style={{ height: 36, width: 'auto', maxWidth: '55%', objectFit: 'contain', objectPosition: 'left center', cursor: 'pointer' }}
+          style={{
+            height: 36,
+            width: 'auto',
+            maxWidth: '55%',
+            objectFit: 'contain',
+            objectPosition: 'left center',
+            cursor: 'pointer'
+          }}
         />
 
         {/* Right side icons */}
@@ -92,13 +126,21 @@ function AppInner({ user, isPremium, setIsPremium, expiresAt, devBoostUnlocked, 
             >
               🌐
             </button>
+
             {showLangMenu && (
               <div className="absolute right-0 top-11 bg-zinc-900 border border-zinc-700 rounded-xl overflow-hidden z-50 shadow-xl">
                 {languageOrder.map(code => (
                   <button
                     key={code}
-                    onClick={() => { setLang(code); setShowLangMenu(false); }}
-                    className={`block w-full text-left px-4 py-2 text-sm font-medium transition hover:bg-zinc-700 ${lang === code ? 'text-amber-400' : 'text-white'}`}
+                    onClick={() => {
+                      setLang(code);
+                      setShowLangMenu(false);
+                    }}
+                    className={`block w-full text-left px-4 py-2 text-sm font-medium transition hover:bg-zinc-700 ${
+                      lang === code
+                        ? 'text-amber-400'
+                        : 'text-white'
+                    }`}
                   >
                     {languageLabels[code]}
                   </button>
@@ -122,17 +164,31 @@ function AppInner({ user, isPremium, setIsPremium, expiresAt, devBoostUnlocked, 
             expiresAt={expiresAt}
             devBoostUnlocked={devBoostUnlocked}
             onDevBoost={() => setDevBoost(true)}
-            onNavigate={(postId) => setNavigateToPostId(postId)}
+            onNavigate={(postId) =>
+              setNavigateToPostId(postId)
+            }
             isAdmin={isAdmin}
             initData={initData}
-            onOpenChallenges={() => setActiveSection('challenge')}
+            onOpenChallenges={() =>
+              setActiveSection('challenge')
+            }
           />
         </div>
       </div>
 
-      {/* Body — Feed or Challenge, switched by the bottom tab bar */}
-      <div className="flex-1 overflow-hidden flex flex-col" style={{ minHeight: 0 }}>
-        <div className={activeSection === 'feed' ? 'flex-1 overflow-hidden px-4 pt-4' : 'hidden'} style={{ minHeight: 0 }}>
+      {/* Body */}
+      <div
+        className="flex-1 overflow-hidden flex flex-col"
+        style={{ minHeight: 0 }}
+      >
+        <div
+          className={
+            activeSection === 'feed'
+              ? 'flex-1 overflow-hidden px-4 pt-4'
+              : 'hidden'
+          }
+          style={{ minHeight: 0 }}
+        >
           <Feed
             isPremium={isPremium}
             telegramId={user?.telegram_id}
@@ -140,28 +196,43 @@ function AppInner({ user, isPremium, setIsPremium, expiresAt, devBoostUnlocked, 
             isAdmin={isAdmin}
             initData={initData}
             navigateToPostId={navigateToPostId}
-            onNavigated={() => setNavigateToPostId(null)}
+            onNavigated={() =>
+              setNavigateToPostId(null)
+            }
           />
         </div>
+
         {activeSection === 'challenge' && (
-          <ChallengeView telegramId={user?.telegram_id} />
+          <ChallengeView
+            telegramId={user?.telegram_id}
+          />
         )}
       </div>
 
       {/* Bottom tab bar */}
-      <div className="flex border-t border-border flex-shrink-0" style={{ height: 56 }}>
+      <div
+        className="flex border-t border-border flex-shrink-0"
+        style={{ height: 56 }}
+      >
         <button
           onClick={() => setActiveSection('feed')}
           className={`flex-1 flex items-center justify-center gap-2 text-sm font-medium ${
-            activeSection === 'feed' ? 'text-white' : 'text-gray-500'
+            activeSection === 'feed'
+              ? 'text-white'
+              : 'text-gray-500'
           }`}
         >
           📺 Feed
         </button>
+
         <button
-          onClick={() => setActiveSection('challenge')}
+          onClick={() =>
+            setActiveSection('challenge')
+          }
           className={`flex-1 flex items-center justify-center gap-2 text-sm font-medium ${
-            activeSection === 'challenge' ? 'text-amber-400' : 'text-gray-500'
+            activeSection === 'challenge'
+              ? 'text-amber-400'
+              : 'text-gray-500'
           }`}
         >
           🏆 Challenge
@@ -170,33 +241,52 @@ function AppInner({ user, isPremium, setIsPremium, expiresAt, devBoostUnlocked, 
 
       {/* DevBoost password modal */}
       {showDevPrompt && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 px-8" style={{ touchAction: 'none' }}>
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 px-8"
+          style={{ touchAction: 'none' }}
+        >
           <div className="bg-zinc-900 rounded-2xl p-6 w-full flex flex-col gap-4 border border-zinc-700">
-            <p className="text-white font-bold text-center text-base">🔐 Developer Access</p>
+
+            <p className="text-white font-bold text-center text-base">
+              🔐 Developer Access
+            </p>
+
             <input
               type="password"
               value={devPassword}
-              onChange={e => { setDevPassword(e.target.value); setDevError(''); }}
-              onKeyDown={e => e.key === 'Enter' && handleDevPasswordSubmit()}
+              onChange={e => {
+                setDevPassword(e.target.value);
+                setDevError('');
+              }}
+              onKeyDown={e =>
+                e.key === 'Enter' &&
+                handleDevPasswordSubmit()
+              }
               placeholder="Enter password"
               autoFocus
               className="bg-zinc-800 text-white text-sm rounded-xl px-4 py-3 outline-none border border-zinc-700 placeholder-gray-600"
             />
+
             {devError && (
-              <p className="text-red-400 text-xs text-center">{devError}</p>
+              <p className="text-red-400 text-xs text-center">
+                {devError}
+              </p>
             )}
+
             <button
               onClick={handleDevPasswordSubmit}
               className="w-full py-3 rounded-xl bg-amber-500 text-black text-sm font-bold"
             >
               Unlock
             </button>
+
             <button
               onClick={() => setShowDevPrompt(false)}
               className="w-full py-2 text-gray-500 text-sm"
             >
               Cancel
             </button>
+
           </div>
         </div>
       )}
@@ -206,39 +296,76 @@ function AppInner({ user, isPremium, setIsPremium, expiresAt, devBoostUnlocked, 
 }
 
 export default function App() {
-  const [user, setUser]             = useState(null);
-  const [isPremium, setIsPremium]   = useState(false);
-  const [expiresAt, setExpiresAt]   = useState(null);
-  const [loading, setLoading]       = useState(true);
-  const [error, setError]           = useState(null);
+  const [user, setUser] = useState(null);
+  const [isPremium, setIsPremium] = useState(false);
+  const [expiresAt, setExpiresAt] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [devBoostUnlocked, setDevBoost] = useState(false);
-  // Telegram's raw signed initData string. Kept in state (not just read
-  // once at login) so it can be sent with admin requests too — the
-  // backend re-verifies its HMAC signature against BOT_TOKEN on every
-  // admin call, so this is a proof of identity, not a bearer secret.
-  const [initData, setInitData]     = useState(null);
-  // Set when the Mini App was opened via a shared-post link
-  // (?post=<id>, added by bot.js's /start post_<id> handler) — read
-  // once on load, doesn't change during the session.
-  const [sharedPostId] = useState(() => new URLSearchParams(window.location.search).get('post'));
 
-  // Start the in-app interstitial ad session once, globally — but only
-  // if the admin currently has this format enabled. Falls back to
-  // "on" if the settings fetch fails, matching the previous behavior
-  // (better than silently going dark if the backend is briefly down).
+  // Telegram raw signed initData string.
+  const [initData, setInitData] = useState(null);
+
+  // Shared post ID.
+  const [sharedPostId] = useState(() =>
+    new URLSearchParams(window.location.search).get('post')
+  );
+
+  // ------------------------------------------------------------
+  // EXISTING IN-APP INTERSTITIAL
+  // ------------------------------------------------------------
+  //
+  // IMPORTANT:
+  // This remains the SAME in-app interstitial lane.
+  //
+  // We are ONLY changing:
+  //
+  //     show_11218209
+  //
+  // to:
+  //
+  //     window.show_11218209
+  //
+  // This prevents Vite/Rollup from treating the Monetag browser
+  // global as an unresolved JavaScript variable during build.
+  //
+  // The actual ad settings remain unchanged:
+  //
+  // type: 'inApp'
+  // frequency: 2
+  // capping: 0.1
+  // interval: 30
+  // timeout: 5
+  // everyPage: false
+  //
+  // This does NOT affect:
+  // - Rewarded Popup
+  // - Rewarded Interstitial
+  // - Normal popup ads
+  // - Any other ad lane
+  // ------------------------------------------------------------
+
   useEffect(() => {
     async function maybeStartInAppAd() {
       let enabled = true;
+
       try {
         const res = await getAdSettings();
-        enabled = res.data.settings?.inapp_interstitial_enabled !== false;
+
+        enabled =
+          res.data.settings
+            ?.inapp_interstitial_enabled !== false;
       } catch {
-        // keep default (enabled)
+        // Keep default enabled if settings fetch fails.
       }
 
-      if (enabled && typeof show_11218209 === 'function') {
-        show_11218209({
+      if (
+        enabled &&
+        typeof window.show_11218209 === 'function'
+      ) {
+        window.show_11218209({
           type: 'inApp',
+
           inAppSettings: {
             frequency: 2,
             capping: 0.1,
@@ -249,56 +376,98 @@ export default function App() {
         }).catch(() => {});
       }
     }
+
     maybeStartInAppAd();
   }, []);
+
+  // ------------------------------------------------------------
+  // TELEGRAM / USER INITIALIZATION
+  // ------------------------------------------------------------
 
   useEffect(() => {
     async function init() {
       try {
         const tg = window.Telegram?.WebApp;
+
         tg?.expand();
 
         const initDataStr = tg?.initData;
 
         if (!initDataStr) {
-          setError('Open this app inside Telegram.');
+          setError(
+            'Open this app inside Telegram.'
+          );
           setLoading(false);
           return;
         }
 
-        const loginRes = await loginUser(initDataStr);
-        const userData = loginRes.data.user;
+        const loginRes =
+          await loginUser(initDataStr);
+
+        const userData =
+          loginRes.data.user;
+
         setUser(userData);
         setInitData(initDataStr);
 
-        const subRes = await getSubscription(userData.telegram_id);
-        setIsPremium(subRes.data.isPremium || false);
-        setExpiresAt(subRes.data.expiresAt || null);
+        const subRes =
+          await getSubscription(
+            userData.telegram_id
+          );
+
+        setIsPremium(
+          subRes.data.isPremium || false
+        );
+
+        setExpiresAt(
+          subRes.data.expiresAt || null
+        );
+
       } catch (err) {
         console.error(err);
-        setError('Failed to load. Please try again.');
+
+        setError(
+          'Failed to load. Please try again.'
+        );
       } finally {
         setLoading(false);
       }
     }
+
     init();
   }, []);
+
+  // ------------------------------------------------------------
+  // LOADING
+  // ------------------------------------------------------------
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-dark">
-        <p className="text-gray-400 text-sm animate-pulse">Loading...</p>
+        <p className="text-gray-400 text-sm animate-pulse">
+          Loading...
+        </p>
       </div>
     );
   }
 
+  // ------------------------------------------------------------
+  // ERROR
+  // ------------------------------------------------------------
+
   if (error) {
     return (
       <div className="flex items-center justify-center h-screen bg-dark">
-        <p className="text-red-400 text-sm text-center px-6">{error}</p>
+        <p className="text-red-400 text-sm text-center px-6">
+          {error}
+        </p>
       </div>
     );
   }
+
+  // ------------------------------------------------------------
+  // MAIN APP
+  // ------------------------------------------------------------
 
   return (
     <LanguageProvider>
