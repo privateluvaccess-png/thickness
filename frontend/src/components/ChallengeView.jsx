@@ -88,18 +88,23 @@ export default function ChallengeView({ telegramId }) {
       {/* Rewarded Ads entry point */}
       <RewardedAdButton telegramId={telegramId} onXpRefresh={load} />
 
-      {/* Weekly Leaderboard */}
-      {leaderboard?.top?.length > 0 && (
+      {/* Weekly Leaderboard — always shown, even with no entries yet,
+          so it doesn't look like the feature is missing/broken */}
+      {leaderboard && (
         <div className="bg-zinc-900 rounded-xl px-4 py-3 flex flex-col gap-2">
           <span className="text-white text-base font-bold">🏆 Weekly Leaderboard</span>
-          {leaderboard.top.slice(0, 3).map(row => (
-            <div key={row.userId} className="flex items-center justify-between text-sm">
-              <span className="text-gray-300">
-                {row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : '🥉'} {row.displayName}
-              </span>
-              <span className="text-gray-500">{row.xp.toLocaleString()} XP</span>
-            </div>
-          ))}
+          {leaderboard.top?.length > 0 ? (
+            leaderboard.top.slice(0, 3).map(row => (
+              <div key={row.userId} className="flex items-center justify-between text-sm">
+                <span className="text-gray-300">
+                  {row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : '🥉'} {row.displayName}
+                </span>
+                <span className="text-gray-500">{row.xp.toLocaleString()} XP</span>
+              </div>
+            ))
+          ) : (
+            <p className="text-gray-500 text-sm">No one has earned XP this week yet — be the first!</p>
+          )}
           {leaderboard.me && (
             <div className="pt-2 mt-1 border-t border-zinc-700">
               <p className="text-amber-400 text-sm font-medium">
@@ -165,7 +170,7 @@ export default function ChallengeView({ telegramId }) {
         </div>
       )}
 
-      {!giftHunt?.enabled && missions.length === 0 && !leaderboard?.top?.length && (
+      {!giftHunt?.enabled && missions.length === 0 && !leaderboard && (
         <p className="text-gray-500 text-sm text-center mt-8">Nothing active right now — check back soon!</p>
       )}
     </div>
