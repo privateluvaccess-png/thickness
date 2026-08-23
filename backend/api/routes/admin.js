@@ -14,6 +14,12 @@ const { getGiftHuntSettings, updateGiftHuntSettings } = require('../../modules/g
 const {
   adminListMissions, adminCreateMission, adminUpdateMission, adminDeleteMission,
 } = require('../../modules/missions');
+const {
+  adminListMilestones, adminUpsertMilestone, adminDeleteMilestone,
+} = require('../../modules/streaks');
+const { getLevelSettings, updateLevelSettings } = require('../../modules/levels');
+const { getNewUserSettings, updateNewUserSettings } = require('../../modules/newUser');
+const { setPostAudience, setPostPin } = require('../../modules/posts');
 const requireAdmin = require('../../middleware/requireAdmin');
 
 // ── Admin panel: paginated post list ────────────────────────────────────────
@@ -235,6 +241,104 @@ router.delete('/missions/:id', requireAdmin, async (req, res) => {
   try {
     await adminDeleteMission(req.params.id);
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Admin panel: Streak milestones ──────────────────────────────────────────
+router.get('/streaks/milestones', requireAdmin, async (req, res) => {
+  try {
+    const milestones = await adminListMilestones();
+    res.json({ success: true, milestones });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/streaks/milestones', requireAdmin, async (req, res) => {
+  try {
+    const { dayCount, xpReward, badgeTitle } = req.body || {};
+    if (!dayCount) return res.status(400).json({ error: 'dayCount is required' });
+    const milestone = await adminUpsertMilestone({ dayCount, xpReward, badgeTitle });
+    res.json({ success: true, milestone });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch('/streaks/milestones/:id', requireAdmin, async (req, res) => {
+  try {
+    const milestone = await adminUpsertMilestone({ id: req.params.id, ...req.body });
+    res.json({ success: true, milestone });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/streaks/milestones/:id', requireAdmin, async (req, res) => {
+  try {
+    await adminDeleteMilestone(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Admin panel: Level curve settings ───────────────────────────────────────
+router.get('/levels/settings', requireAdmin, async (req, res) => {
+  try {
+    const settings = await getLevelSettings();
+    res.json({ success: true, settings });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/levels/settings', requireAdmin, async (req, res) => {
+  try {
+    const settings = await updateLevelSettings(req.body || {}, req.adminTelegramId);
+    res.json({ success: true, settings });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Admin panel: New User settings ──────────────────────────────────────────
+router.get('/new-user/settings', requireAdmin, async (req, res) => {
+  try {
+    const settings = await getNewUserSettings();
+    res.json({ success: true, settings });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/new-user/settings', requireAdmin, async (req, res) => {
+  try {
+    const settings = await updateNewUserSettings(req.body || {}, req.adminTelegramId);
+    res.json({ success: true, settings });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Admin panel: Post audience + pin-for-new-users ──────────────────────────
+router.post('/posts/:post_id/audience', requireAdmin, async (req, res) => {
+  try {
+    const { audience } = req.body || {};
+    const post = await setPostAudience(req.params.post_id, audience);
+    res.json({ success: true, post });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post('/posts/:post_id/pin', requireAdmin, async (req, res) => {
+  try {
+    const { pinned, priority } = req.body || {};
+    const post = await setPostPin(req.params.post_id, pinned, priority);
+    res.json({ success: true, post });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
