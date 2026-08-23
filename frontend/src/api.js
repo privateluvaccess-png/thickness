@@ -56,6 +56,12 @@ export const getMyXp = (userId) => API.get(`/api/xp/${userId}`);
 // Ad format settings — public read (frontend decides which show_11218209
 // calls to make); admin write (toggle formats on/off).
 export const getAdSettings = () => API.get('/api/ads/settings');
+
+// Rewarded-ad status for a user: daily usage, cap, reset time, cooldown.
+// Used by RewardedAdButton to drive the countdown UI.
+// The backend remains the real enforcement gate — this is a read-only status call.
+export const getAdWatchStatus = (userId) =>
+  API.get(`/api/rewards/ad-status/${userId}`);
 export const getAdminAdSettings = (initData) =>
   API.get('/api/admin/ads/settings', { headers: { 'x-telegram-init-data': initData } });
 export const updateAdminAdSettings = (initData, settings) =>
