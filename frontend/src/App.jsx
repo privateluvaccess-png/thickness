@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
 import Feed from './components/Feed';
+import ChallengeView from './components/ChallengeView';
 import SubscriptionBadge from './components/SubscriptionBadge';
 import { loginUser, getSubscription, getAdSettings } from './api';
 import { languageLabels, languageOrder } from './i18n/translations';
@@ -15,6 +16,7 @@ function AppInner({ user, isPremium, setIsPremium, expiresAt, devBoostUnlocked, 
   const [showDevPrompt, setShowDevPrompt] = useState(false);
   const [devPassword, setDevPassword]   = useState('');
   const [devError, setDevError]         = useState('');
+  const [activeSection, setActiveSection] = useState('feed'); // 'feed' | 'challenge'
 
   const DEV_PASSWORD = import.meta.env.VITE_DEV_PASSWORD || 'thickness_dev';
   const ADMIN_TG_ID  = import.meta.env.VITE_ADMIN_TELEGRAM_ID;
@@ -113,21 +115,47 @@ function AppInner({ user, isPremium, setIsPremium, expiresAt, devBoostUnlocked, 
             onNavigate={(postId) => setNavigateToPostId(postId)}
             isAdmin={isAdmin}
             initData={initData}
+            onOpenChallenges={() => setActiveSection('challenge')}
           />
         </div>
       </div>
 
-      {/* Feed — takes remaining space, clips internally */}
-      <div className="flex-1 overflow-hidden px-4 pt-4" style={{ minHeight: 0 }}>
-        <Feed
-          isPremium={isPremium}
-          telegramId={user?.telegram_id}
-          onUnlocked={() => setIsPremium(true)}
-          isAdmin={isAdmin}
-          initData={initData}
-          navigateToPostId={navigateToPostId}
-          onNavigated={() => setNavigateToPostId(null)}
-        />
+      {/* Body — Feed or Challenge, switched by the bottom tab bar */}
+      <div className="flex-1 overflow-hidden flex flex-col" style={{ minHeight: 0 }}>
+        <div className={activeSection === 'feed' ? 'flex-1 overflow-hidden px-4 pt-4' : 'hidden'} style={{ minHeight: 0 }}>
+          <Feed
+            isPremium={isPremium}
+            telegramId={user?.telegram_id}
+            onUnlocked={() => setIsPremium(true)}
+            isAdmin={isAdmin}
+            initData={initData}
+            navigateToPostId={navigateToPostId}
+            onNavigated={() => setNavigateToPostId(null)}
+          />
+        </div>
+        {activeSection === 'challenge' && (
+          <ChallengeView telegramId={user?.telegram_id} />
+        )}
+      </div>
+
+      {/* Bottom tab bar */}
+      <div className="flex border-t border-border flex-shrink-0" style={{ height: 56 }}>
+        <button
+          onClick={() => setActiveSection('feed')}
+          className={`flex-1 flex items-center justify-center gap-2 text-sm font-medium ${
+            activeSection === 'feed' ? 'text-white' : 'text-gray-500'
+          }`}
+        >
+          📺 Feed
+        </button>
+        <button
+          onClick={() => setActiveSection('challenge')}
+          className={`flex-1 flex items-center justify-center gap-2 text-sm font-medium ${
+            activeSection === 'challenge' ? 'text-amber-400' : 'text-gray-500'
+          }`}
+        >
+          🏆 Challenge
+        </button>
       </div>
 
       {/* DevBoost password modal */}
