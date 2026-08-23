@@ -7,21 +7,20 @@ const { processMonetagPostback } = require('../../modules/rewardedAds');
 // callback (in App.jsx / wherever the ad is shown) must NOT grant
 // any reward itself — only this endpoint does.
 //
-// ── Setup (one-time, done in the Monetag SSP dashboard) ────────────
-// Configure the postback URL for zone 11218209 as:
-//   https://<your-backend>/api/rewards/postback/monetag
-//     ?token=<MONETAG_POSTBACK_SECRET>
-//     &ymid={ymid}
-//     &event_type={event_type}
-//     &reward_event_type={reward_event_type}
-//     &request_var={request_var}
-//     &telegram_id={telegram_id}
-//     &estimated_price={estimated_price}
-// The `token` is a literal value YOU choose (set as MONETAG_POSTBACK_SECRET
-// on the backend) — it's static in the URL you configure, so only
-// Monetag's server (calling the URL you set up) can produce a request
-// with the correct token. Everything else is a Monetag macro that
-// gets substituted with real values per event.
+// ── Setup (one-time, in Monetag's "Postback for Thicknessbot" screen) ──
+// That screen only exposes these macros: Telegram ID, Zone ID,
+// Sub zone ID, Event type, Reward event type, Estimated price, YMID
+// (no request_var here, so ad "format" — popup vs interstitial —
+// won't be tracked per event; that's fine, it's non-critical metadata
+// and the `format` column is nullable).
+//
+// In the "Your backend URL" box, type the static parts yourself and
+// tap each macro chip to insert its real placeholder at the cursor:
+//   https://<your-backend>/api/rewards/postback/monetag?token=<MONETAG_POSTBACK_SECRET>&ymid=[tap YMID chip]&event_type=[tap Event type chip]&reward_event_type=[tap Reward event type chip]&telegram_id=[tap Telegram ID chip]&estimated_price=[tap Estimated price chip]
+// `token` is a literal value YOU choose (also set as
+// MONETAG_POSTBACK_SECRET on the backend) — since it's static in the
+// URL you configure, only a request coming through Monetag's
+// configured postback can produce it.
 router.get('/postback/monetag', async (req, res) => {
   try {
     const expectedToken = process.env.MONETAG_POSTBACK_SECRET;
