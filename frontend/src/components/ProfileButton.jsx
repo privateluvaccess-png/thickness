@@ -109,11 +109,25 @@ export default function ProfileButton({ user, isPremium, expiresAt, devBoostUnlo
             </div>
 
             {xp && (
-              <div className="bg-zinc-800 rounded-xl px-4 py-3 flex items-center justify-between">
-                <span className="text-gray-400 text-sm">XP</span>
-                <span className="text-white font-semibold text-sm">
-                  {xp.lifetimeXp} lifetime · {xp.weeklyXp} this week
+              <div className="bg-zinc-800 rounded-xl px-4 py-3 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-white font-semibold text-sm">⭐ Level {xp.level}</span>
+                  <span className="text-gray-500 text-xs">{xp.weeklyXp} XP this week</span>
+                </div>
+                <div className="w-full h-2 bg-zinc-700 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-500 rounded-full transition-all"
+                    style={{ width: `${Math.min(100, (xp.xpIntoLevel / xp.xpForNextLevel) * 100)}%` }}
+                  />
+                </div>
+                <span className="text-gray-500 text-xs">
+                  {xp.xpIntoLevel} / {xp.xpForNextLevel} XP to Level {xp.level + 1}
                 </span>
+                {xp.streak?.currentStreak > 0 && (
+                  <span className="text-amber-400 text-xs">
+                    🔥 {xp.streak.currentStreak} day streak (best: {xp.streak.longestStreak})
+                  </span>
+                )}
               </div>
             )}
 
