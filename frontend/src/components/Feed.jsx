@@ -302,6 +302,15 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, initD
   const scrollRef = useRef(null);
 
   useEffect(() => {
+    // Wait until we actually know who's logged in — fetching before
+    // telegramId is available (e.g. right after opening/reopening the
+    // app, while login is still in flight) would return posts with no
+    // like/bookmark state for this user, and since telegramId wasn't
+    // in this effect's dependencies, it would never re-fetch once
+    // login finished — making likes/bookmarks look "lost" even though
+    // they were saved correctly server-side the whole time.
+    if (!telegramId) return;
+
     async function load() {
       try {
         setLoading(true);
@@ -324,7 +333,7 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, initD
       }
     }
     load();
-  }, [isPremium, isAdmin]);
+  }, [isPremium, isAdmin, telegramId]);
 
   useEffect(() => {
     if (!navigateToPostId) return;
