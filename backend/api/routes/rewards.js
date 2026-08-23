@@ -26,11 +26,23 @@ router.get('/postback/monetag', async (req, res) => {
     const expectedToken = process.env.MONETAG_POSTBACK_SECRET;
     const providedToken = req.query.token;
     if (!expectedToken || providedToken !== expectedToken) {
+      // Log the mismatch (not the actual secret values) so a bad
+      // token is visible in Render logs instead of silently vanishing.
+      console.warn('[rewards/postback/monetag] rejected: token mismatch',
+        { tokenConfigured: !!expectedToken, tokenProvided: !!providedToken });
       // Still 200 — an attacker fishing for a working token shouldn't
       // learn anything from the status code, and there's nothing for
       // Monetag to usefully retry here either way.
       return res.status(200).json({ ok: false });
     }
+
+    console.log('[rewards/postback/monetag] received:', {
+      ymid: req.query.ymid,
+      event_type: req.query.event_type,
+      reward_event_type: req.query.reward_event_type,
+      telegram_id: req.query.telegram_id,
+      estimated_price: req.query.estimated_price,
+    });
 
     const result = await processMonetagPostback({
       ymid: req.query.ymid,
@@ -40,6 +52,8 @@ router.get('/postback/monetag', async (req, res) => {
       rewardEventType: req.query.reward_event_type,
       estimatedPrice: req.query.estimated_price ? Number(req.query.estimated_price) : null,
     });
+
+    console.log('[rewards/postback/monetag] result:', result);
 
     // Always 200 on a handled request — Monetag retries on non-2xx,
     // and "not granted because not valued / over cap / duplicate" is
