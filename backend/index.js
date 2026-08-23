@@ -53,6 +53,7 @@ app.use('/api/ads',           require('./api/routes/ads'));
 app.use('/api/rewards',       require('./api/routes/rewards'));
 app.use('/api/gift-hunt',     require('./api/routes/giftHunt'));
 app.use('/api/missions',      require('./api/routes/missions'));
+app.use('/api/leaderboard',   require('./api/routes/leaderboard'));
 app.use('/api/admin',         require('./api/routes/admin'));
 
 // Inject bot into payments module
