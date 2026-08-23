@@ -83,3 +83,34 @@ export const updateAdminMission = (initData, id, fields) =>
   API.patch(`/api/admin/missions/${id}`, fields, { headers: { 'x-telegram-init-data': initData } });
 export const deleteAdminMission = (initData, id) =>
   API.delete(`/api/admin/missions/${id}`, { headers: { 'x-telegram-init-data': initData } });
+
+// Pinned new-user onboarding posts (public — server checks eligibility)
+export const getPinnedNewUserPosts = (userId) => API.get(`/api/posts/pinned-new-user/${userId}`);
+
+// Streak milestones — admin CRUD
+export const getAdminStreakMilestones = (initData) =>
+  API.get('/api/admin/streaks/milestones', { headers: { 'x-telegram-init-data': initData } });
+export const createAdminStreakMilestone = (initData, milestone) =>
+  API.post('/api/admin/streaks/milestones', milestone, { headers: { 'x-telegram-init-data': initData } });
+export const updateAdminStreakMilestone = (initData, id, fields) =>
+  API.patch(`/api/admin/streaks/milestones/${id}`, fields, { headers: { 'x-telegram-init-data': initData } });
+export const deleteAdminStreakMilestone = (initData, id) =>
+  API.delete(`/api/admin/streaks/milestones/${id}`, { headers: { 'x-telegram-init-data': initData } });
+
+// Level curve — admin settings
+export const getAdminLevelSettings = (initData) =>
+  API.get('/api/admin/levels/settings', { headers: { 'x-telegram-init-data': initData } });
+export const updateAdminLevelSettings = (initData, settings) =>
+  API.post('/api/admin/levels/settings', settings, { headers: { 'x-telegram-init-data': initData } });
+
+// New User — admin settings
+export const getAdminNewUserSettings = (initData) =>
+  API.get('/api/admin/new-user/settings', { headers: { 'x-telegram-init-data': initData } });
+export const updateAdminNewUserSettings = (initData, settings) =>
+  API.post('/api/admin/new-user/settings', settings, { headers: { 'x-telegram-init-data': initData } });
+
+// Post audience + pin-for-new-users — admin
+export const setAdminPostAudience = (initData, postId, audience) =>
+  API.post(`/api/admin/posts/${postId}/audience`, { audience }, { headers: { 'x-telegram-init-data': initData } });
+export const setAdminPostPin = (initData, postId, pinned, priority) =>
+  API.post(`/api/admin/posts/${postId}/pin`, { pinned, priority }, { headers: { 'x-telegram-init-data': initData } });
