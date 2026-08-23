@@ -1,5 +1,6 @@
 const supabase = require('../../supabase');
 const { awardXp } = require('../xp');
+const { recordActivity: recordStreakActivity } = require('../streaks');
 
 let missionsCache = { data: null, expiresAt: 0 };
 const CACHE_TTL_MS = 30 * 1000;
@@ -47,6 +48,12 @@ async function recordMissionAction(userId, requirementType, refId) {
     if (logError.code === '23505') return { counted: false, reason: 'already counted today' };
     throw logError;
   }
+
+  // This is a genuinely new action for today (not a repeat) — counts
+  // as today's "meaningful activity" for the streak too.
+  recordStreakActivity(userId).catch(err =>
+    console.error('[missions] recordStreakActivity failed:', err.message)
+  );
 
   const missions = await getActiveMissions();
   const matching = missions.filter(m => m.requirement_type === requirementType);
