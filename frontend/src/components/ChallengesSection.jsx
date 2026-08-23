@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getGiftHuntStatus, claimGiftHunt, getMissionsToday } from '../api';
+import { getGiftHuntStatus, claimGiftHunt, getMissionsToday, getWeeklyLeaderboard } from '../api';
 
 // All progress numbers here come straight from the server — nothing
 // is computed or trusted client-side. Tapping "Claim" doesn't grant
@@ -8,6 +8,7 @@ import { getGiftHuntStatus, claimGiftHunt, getMissionsToday } from '../api';
 export default function ChallengesSection({ telegramId, onReward }) {
   const [giftHunt, setGiftHunt] = useState(null);
   const [missions, setMissions] = useState([]);
+  const [leaderboard, setLeaderboard] = useState(null);
   const [claiming, setClaiming] = useState(false);
   const [claimMsg, setClaimMsg] = useState('');
 
@@ -15,6 +16,7 @@ export default function ChallengesSection({ telegramId, onReward }) {
     if (!telegramId) return;
     getGiftHuntStatus(telegramId).then(res => setGiftHunt(res.data)).catch(() => {});
     getMissionsToday(telegramId).then(res => setMissions(res.data.missions || [])).catch(() => {});
+    getWeeklyLeaderboard(telegramId).then(res => setLeaderboard(res.data)).catch(() => {});
   }
 
   useEffect(load, [telegramId]);
@@ -38,10 +40,36 @@ export default function ChallengesSection({ telegramId, onReward }) {
     }
   }
 
-  if (!giftHunt && missions.length === 0) return null;
+  if (!giftHunt && missions.length === 0 && !leaderboard) return null;
 
   return (
     <div className="flex flex-col gap-3">
+      {leaderboard?.top?.length > 0 && (
+        <div className="bg-zinc-800 rounded-xl px-4 py-3 flex flex-col gap-2">
+          <span className="text-white text-sm font-semibold">🏆 Weekly Leaderboard</span>
+          {leaderboard.top.slice(0, 3).map(row => (
+            <div key={row.userId} className="flex items-center justify-between text-xs">
+              <span className="text-gray-300">
+                {row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : '🥉'} {row.displayName}
+              </span>
+              <span className="text-gray-500">{row.xp.toLocaleString()} XP</span>
+            </div>
+          ))}
+          {leaderboard.me && (
+            <div className="pt-1 mt-1 border-t border-zinc-700">
+              <p className="text-amber-400 text-xs font-medium">
+                You — #{leaderboard.me.rank} — {leaderboard.me.xp.toLocaleString()} XP
+              </p>
+              {leaderboard.me.xpToThirdPlace > 0 && (
+                <p className="text-gray-500 text-xs">
+                  Only {leaderboard.me.xpToThirdPlace.toLocaleString()} XP to reach #3.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {giftHunt?.enabled && (
         <div className="bg-zinc-800 rounded-xl px-4 py-3 flex flex-col gap-2">
           <div className="flex items-center justify-between">
