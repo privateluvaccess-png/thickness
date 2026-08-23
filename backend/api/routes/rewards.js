@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const { processMonetagPostback } = require('../../modules/rewardedAds');
+const { processMonetagPostback, getAdWatchStatus } = require('../../modules/rewardedAds');
 
 // Monetag calls this directly, server-to-server, when a Rewarded
 // Interstitial or Rewarded Popup event is confirmed on their end.
@@ -63,6 +63,27 @@ router.get('/postback/monetag', async (req, res) => {
     // A genuine server error (e.g. DB unreachable) — let Monetag retry.
     console.error('[rewards/postback/monetag] error:', err.message);
     res.status(500).json({ ok: false });
+  }
+});
+
+// Returns the current rewarded-ad status for a user:
+// how many ads they've watched today, the daily cap, when
+// the daily count resets (next UTC midnight), and whether
+// a per-ad cooldown is currently active.
+// Used by RewardedAdButton.jsx to drive the countdown UI.
+// The backend remains the real enforcement gate — this is
+// only a status read so the frontend can display accurate info.
+router.get('/ad-status/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    if (!userId) {
+      return res.status(400).json({ ok: false, error: 'userId is required' });
+    }
+    const statusData = await getAdWatchStatus(userId);
+    res.status(200).json(statusData);
+  } catch (err) {
+    console.error('[rewards/ad-status] error:', err.message);
+    res.status(500).json({ ok: false, error: 'Failed to fetch ad watch status' });
   }
 });
 
