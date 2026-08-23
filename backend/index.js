@@ -8,6 +8,15 @@ const paymentsModule = require('./api/routes/payments');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Render (and most PaaS hosts) sit behind a reverse proxy, which sets
+// X-Forwarded-For on every request. Without this, express-rate-limit
+// throws ERR_ERL_UNEXPECTED_X_FORWARDED_FOR on every single request
+// (visible flooding the logs) and can't reliably identify per-client
+// IPs for rate limiting. `1` = trust exactly one hop (Render's own
+// proxy) — not a wildcard, so it can't be spoofed by a client sending
+// a fake X-Forwarded-For header themselves.
+app.set('trust proxy', 1);
+
 // ── CORS ──────────────────────────────────────────────────────────────────────
 const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5173')
   .split(',')
