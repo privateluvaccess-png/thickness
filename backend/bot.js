@@ -32,6 +32,27 @@ bot.start(async (ctx) => {
   const user = ctx.from;
   await getOrCreateUser(user);
 
+  // Shared-post deep link: /start post_<id> (sent when someone taps a
+  // "Share" button on a post). Opens the Mini App straight to that post
+  // instead of the generic welcome screen.
+  const payload = ctx.startPayload || '';
+  const sharedPostId = payload.startsWith('post_') ? payload.slice('post_'.length) : null;
+
+  if (sharedPostId) {
+    await ctx.reply(
+      `👀 Someone shared a post with you on *Thickness!*\n\nTap below to view it.`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [[
+            { text: '🌟 Open Post', web_app: { url: `${process.env.FRONTEND_URL}?post=${encodeURIComponent(sharedPostId)}` } }
+          ]]
+        }
+      }
+    );
+    return;
+  }
+
   await ctx.reply(
     `Welcome to *Thickness!* 🌟\n\nBrowse free content or unlock premium for exclusive posts.\n\nTap below to open the app!`,
     {
