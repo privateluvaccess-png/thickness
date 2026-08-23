@@ -1,13 +1,10 @@
 import React, { useState } from 'react';
 import BookmarksSheet from './BookmarksSheet';
 import AdminPanel from './AdminPanel';
-import RewardedAdButton from './RewardedAdButton';
-import ChallengesSection from './ChallengesSection';
-import { getMyXp } from '../api';
 
 const BACKEND = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
-export default function ProfileButton({ user, isPremium, expiresAt, devBoostUnlocked, onDevBoost, onNavigate, isAdmin, initData }) {
+export default function ProfileButton({ user, isPremium, expiresAt, devBoostUnlocked, onDevBoost, onNavigate, isAdmin, initData, onOpenChallenges }) {
   const [open,          setOpen]          = useState(false);
   const [showBookmarks, setShowBookmarks] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
@@ -15,12 +12,6 @@ export default function ProfileButton({ user, isPremium, expiresAt, devBoostUnlo
   const [boostMsg,      setBoostMsg]      = useState('');
   const [showSecretPrompt, setShowSecretPrompt] = useState(false);
   const [boostSecret,   setBoostSecret]   = useState('');
-  const [xp, setXp] = useState(null);
-
-  function refreshXp() {
-    if (!user?.telegram_id) return;
-    getMyXp(user.telegram_id).then(res => setXp(res.data)).catch(() => {});
-  }
 
   const initials  = user?.first_name?.slice(0, 1).toUpperCase() || '?';
   const avatarUrl = user?.photo_url || null;
@@ -57,7 +48,7 @@ export default function ProfileButton({ user, isPremium, expiresAt, devBoostUnlo
   return (
     <>
       <button
-        onClick={() => { setOpen(true); refreshXp(); }}
+        onClick={() => setOpen(true)}
         className="relative w-9 h-9 rounded-full overflow-hidden border-2 border-border flex items-center justify-center bg-zinc-800 flex-shrink-0"
       >
         {avatarUrl ? (
@@ -108,32 +99,12 @@ export default function ProfileButton({ user, isPremium, expiresAt, devBoostUnlo
               )}
             </div>
 
-            {xp && (
-              <div className="bg-zinc-800 rounded-xl px-4 py-3 flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-white font-semibold text-sm">⭐ Level {xp.level}</span>
-                  <span className="text-gray-500 text-xs">{xp.weeklyXp} XP this week</span>
-                </div>
-                <div className="w-full h-2 bg-zinc-700 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-blue-500 rounded-full transition-all"
-                    style={{ width: `${Math.min(100, (xp.xpIntoLevel / xp.xpForNextLevel) * 100)}%` }}
-                  />
-                </div>
-                <span className="text-gray-500 text-xs">
-                  {xp.xpIntoLevel} / {xp.xpForNextLevel} XP to Level {xp.level + 1}
-                </span>
-                {xp.streak?.currentStreak > 0 && (
-                  <span className="text-amber-400 text-xs">
-                    🔥 {xp.streak.currentStreak} day streak (best: {xp.streak.longestStreak})
-                  </span>
-                )}
-              </div>
-            )}
-
-            <RewardedAdButton telegramId={user?.telegram_id} onXpRefresh={refreshXp} />
-
-            <ChallengesSection telegramId={user?.telegram_id} onReward={refreshXp} />
+            <button
+              onClick={() => { setOpen(false); onOpenChallenges?.(); }}
+              className="w-full py-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-sm font-semibold flex items-center justify-center gap-2"
+            >
+              🏆 View Challenges
+            </button>
 
             <button
               onClick={() => setShowBookmarks(true)}
