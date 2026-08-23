@@ -8,7 +8,7 @@ import { languageLabels, languageOrder } from './i18n/translations';
 import logo from './assets/logo.webp';
 import ProfileButton from './components/ProfileButton';
 
-function AppInner({ user, isPremium, setIsPremium, expiresAt, devBoostUnlocked, setDevBoost, initData }) {
+function AppInner({ user, isPremium, setIsPremium, expiresAt, devBoostUnlocked, setDevBoost, initData, sharedPostId }) {
   const { lang, setLang } = useLanguage();
   const [isDark, setIsDark]             = useState(true);
   const [showLangMenu, setShowLangMenu] = useState(false);
@@ -17,6 +17,16 @@ function AppInner({ user, isPremium, setIsPremium, expiresAt, devBoostUnlocked, 
   const [devPassword, setDevPassword]   = useState('');
   const [devError, setDevError]         = useState('');
   const [activeSection, setActiveSection] = useState('feed'); // 'feed' | 'challenge'
+
+  // If the app was opened via a shared-post link, make sure we're on
+  // the Feed tab (not wherever the user last left off) and tell Feed
+  // to scroll to that post once it's loaded.
+  useEffect(() => {
+    if (sharedPostId) {
+      setActiveSection('feed');
+      setNavigateToPostId(sharedPostId);
+    }
+  }, [sharedPostId]);
 
   const DEV_PASSWORD = import.meta.env.VITE_DEV_PASSWORD || 'thickness_dev';
   const ADMIN_TG_ID  = import.meta.env.VITE_ADMIN_TELEGRAM_ID;
@@ -207,6 +217,10 @@ export default function App() {
   // backend re-verifies its HMAC signature against BOT_TOKEN on every
   // admin call, so this is a proof of identity, not a bearer secret.
   const [initData, setInitData]     = useState(null);
+  // Set when the Mini App was opened via a shared-post link
+  // (?post=<id>, added by bot.js's /start post_<id> handler) — read
+  // once on load, doesn't change during the session.
+  const [sharedPostId] = useState(() => new URLSearchParams(window.location.search).get('post'));
 
   // Start the in-app interstitial ad session once, globally — but only
   // if the admin currently has this format enabled. Falls back to
@@ -296,6 +310,7 @@ export default function App() {
         devBoostUnlocked={devBoostUnlocked}
         setDevBoost={setDevBoost}
         initData={initData}
+        sharedPostId={sharedPostId}
       />
     </LanguageProvider>
   );
