@@ -77,7 +77,7 @@ async function syncPost(message, tier) {
   return data;
 }
 
-async function getFeed(tier, userId) {
+async function getFeed(tier, userId, { isNewUser = false, isPremiumUser = false } = {}) {
   let query = supabase
     .from('posts')
     .select('*');
@@ -86,11 +86,21 @@ async function getFeed(tier, userId) {
     query = query.eq('tier', tier);
   }
 
-  const { data: posts } = await query
+  const { data: allPosts } = await query
     .order('created_at', { ascending: false })
     .limit(50);
 
-  if (!posts) return [];
+  if (!allPosts) return [];
+
+  // Audience filtering: 'everyone' always shows; 'new_users' only to
+  // users still inside their new-user window; 'premium' only to
+  // Premium users (orthogonal to `tier`, which drives the free/premium
+  // feed tabs themselves — a post can be free-tier AND premium-audience).
+  const posts = allPosts.filter(p => {
+    if (p.audience === 'new_users') return isNewUser;
+    if (p.audience === 'premium') return isPremiumUser;
+    return true;
+  });
 
   // If userId provided, fetch which posts the user liked and bookmarked
   if (userId) {
@@ -124,6 +134,49 @@ async function getPostById(postId) {
   return data;
 }
 
+// Pinned onboarding posts for eligible new users — any existing post
+// can be pinned (doesn't duplicate it), shown above the regular feed.
+// Capped at 5 by convention (enforced in the admin UI, not the DB —
+// an admin could technically pin more, it just won't look great).
+async function getPinnedNewUserPosts() {
+  const { data, error } = await supabase
+    .from('posts')
+    .select('*')
+    .eq('pinned_for_new_users', true)
+    .order('pin_priority', { ascending: true })
+    .limit(5);
+  if (error) throw error;
+  return data || [];
+}
+
+// Admin: set a post's audience (everyone / new_users / premium).
+async function setPostAudience(postId, audience) {
+  const allowed = ['everyone', 'new_users', 'premium'];
+  if (!allowed.includes(audience)) throw new Error(`audience must be one of: ${allowed.join(', ')}`);
+
+  const { data, error } = await supabase
+    .from('posts')
+    .update({ audience })
+    .eq('id', postId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// Admin: pin/unpin a post for new users, with a display priority
+// (lower = shown first).
+async function setPostPin(postId, pinned, priority = 0) {
+  const { data, error } = await supabase
+    .from('posts')
+    .update({ pinned_for_new_users: !!pinned, pin_priority: Number(priority) || 0 })
+    .eq('id', postId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 // Admin: paginated list across all tiers, newest first.
 // Uses keyset ("cursor") pagination on the indexed created_at column
 // instead of OFFSET, so pages stay cheap even as the table grows —
@@ -133,7 +186,7 @@ async function getPostsAdmin({ limit = 20, cursor = null } = {}) {
 
   let query = supabase
     .from('posts')
-    .select('id, tier, type, caption, created_at')
+    .select('id, tier, type, caption, created_at, audience, pinned_for_new_users, pin_priority')
     .order('created_at', { ascending: false })
     .limit(safeLimit + 1); // fetch one extra to know if there's a next page
 
@@ -167,4 +220,7 @@ async function deletePostById(postId) {
     .eq('id', postId);
 }
 
-module.exports = { syncPost, deletePost, deletePostById, getFeed, getPostById, getPostsAdmin };
+module.exports = {
+  syncPost, deletePost, deletePostById, getFeed, getPostById, getPostsAdmin,
+  getPinnedNewUserPosts, setPostAudience, setPostPin,
+};
