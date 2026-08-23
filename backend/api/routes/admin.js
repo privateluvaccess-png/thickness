@@ -18,6 +18,7 @@ const {
   adminListMilestones, adminUpsertMilestone, adminDeleteMilestone,
 } = require('../../modules/streaks');
 const { getLevelSettings, updateLevelSettings } = require('../../modules/levels');
+const { getSettings: getWeeklySettings, updateSettings: updateWeeklySettings } = require('../../modules/weeklyChallenge');
 const { getNewUserSettings, updateNewUserSettings } = require('../../modules/newUser');
 const { setPostAudience, setPostPin } = require('../../modules/posts');
 const requireAdmin = require('../../middleware/requireAdmin');
@@ -299,6 +300,38 @@ router.post('/levels/settings', requireAdmin, async (req, res) => {
   try {
     const settings = await updateLevelSettings(req.body || {}, req.adminTelegramId);
     res.json({ success: true, settings });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Admin panel: Weekly Challenge settings ──────────────────────────────────
+router.get('/weekly-challenge/settings', requireAdmin, async (req, res) => {
+  try {
+    const settings = await getWeeklySettings();
+    res.json({ success: true, settings });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/weekly-challenge/settings', requireAdmin, async (req, res) => {
+  try {
+    const settings = await updateWeeklySettings(req.body || {}, req.adminTelegramId);
+    res.json({ success: true, settings });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/weekly-challenge/results', requireAdmin, async (req, res) => {
+  try {
+    const { week_key } = req.query;
+    let query = supabase.from('weekly_challenge_results').select('*').order('created_at', { ascending: false });
+    if (week_key) query = query.eq('week_key', week_key);
+    const { data, error } = await query.limit(30);
+    if (error) throw error;
+    res.json({ success: true, results: data });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
