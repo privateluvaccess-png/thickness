@@ -27,6 +27,63 @@ async function getTodayAdEventCount(userId) {
   return count || 0;
 }
 
+// Most recent successful (rewarded) ad watch, across all time — not
+// scoped to "today", since the cooldown needs to work correctly even
+// right after a midnight rollover (e.g. watched at 11:50pm, cooldown
+// shouldn't reset to zero just because the calendar day changed).
+async function getLastRewardedAdAt(userId) {
+  const { data, error } = await supabase
+    .from('reward_ad_events')
+    .select('created_at')
+    .eq('user_id', userId)
+    .not('points_awarded', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows, expected for a new user
+  return data?.created_at || null;
+}
+
+// Spreads the daily allowance evenly across 24h rather than letting
+// someone burn through all of them back-to-back — e.g. a 5-per-day
+// cap means one ad roughly every 4.8 hours.
+function cooldownMsFor(dailyLimit) {
+  return (24 * 60 * 60 * 1000) / Math.max(1, dailyLimit);
+}
+
+// Public status for the frontend button: how many rewarded ads this
+// user has already had counted today, the configured daily cap, when
+// the daily count resets (next UTC midnight), and — separately —
+// when the *next single ad* becomes available if they're currently
+// in the per-ad cooldown window. The UI shows whichever countdown is
+// actually blocking them.
+async function getAdWatchStatus(userId) {
+  const settings = await getAdSettings();
+  const [used, lastRewardedAt] = await Promise.all([
+    getTodayAdEventCount(userId),
+    getLastRewardedAdAt(userId),
+  ]);
+
+  const resetsAt = new Date();
+  resetsAt.setUTCHours(24, 0, 0, 0); // next UTC midnight
+
+  const cooldownMs = cooldownMsFor(settings.daily_ad_limit);
+  const nextAvailableAt = lastRewardedAt
+    ? new Date(new Date(lastRewardedAt).getTime() + cooldownMs)
+    : null;
+  const cooldownActive = !!nextAvailableAt && nextAvailableAt.getTime() > Date.now();
+
+  return {
+    used,
+    limit: settings.daily_ad_limit,
+    remaining: Math.max(0, settings.daily_ad_limit - used),
+    resetsAt: resetsAt.toISOString(),
+    cooldownActive,
+    nextAvailableAt: cooldownActive ? nextAvailableAt.toISOString() : null,
+  };
+}
+
 // Processes one confirmed Monetag postback. Always returns a result
 // object rather than throwing for "expected" non-grant outcomes
 // (not a valued event, over daily cap, already processed) — those are
@@ -57,6 +114,19 @@ async function processMonetagPostback({ ymid, telegramIdFromMacro, format, event
   if (todayCount >= settings.daily_ad_limit) {
     await _recordEvent({ userId, ymid, format, eventType, rewardEventType, estimatedPrice, points: null });
     return { granted: false, reason: 'daily ad limit reached' };
+  }
+
+  // Server-side enforcement of the spacing — this is the real gate,
+  // not just the frontend countdown (which is only a UI convenience
+  // and could otherwise be bypassed by calling the ad SDK directly).
+  const lastRewardedAt = await getLastRewardedAdAt(userId);
+  if (lastRewardedAt) {
+    const cooldownMs = cooldownMsFor(settings.daily_ad_limit);
+    const elapsedMs = Date.now() - new Date(lastRewardedAt).getTime();
+    if (elapsedMs < cooldownMs) {
+      await _recordEvent({ userId, ymid, format, eventType, rewardEventType, estimatedPrice, points: null });
+      return { granted: false, reason: `cooldown active, ${Math.ceil((cooldownMs - elapsedMs) / 60000)} min remaining` };
+    }
   }
 
   const points = settings.xp_per_rewarded_ad;
@@ -104,4 +174,4 @@ async function _recordEvent({ userId, ymid, format, eventType, rewardEventType, 
   if (error && error.code !== '23505') throw error;
 }
 
-module.exports = { processMonetagPostback, parseUserIdFromYmid };
+module.exports = { processMonetagPostback, parseUserIdFromYmid, getAdWatchStatus };
