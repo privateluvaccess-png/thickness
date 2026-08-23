@@ -114,3 +114,15 @@ export const setAdminPostAudience = (initData, postId, audience) =>
   API.post(`/api/admin/posts/${postId}/audience`, { audience }, { headers: { 'x-telegram-init-data': initData } });
 export const setAdminPostPin = (initData, postId, pinned, priority) =>
   API.post(`/api/admin/posts/${postId}/pin`, { pinned, priority }, { headers: { 'x-telegram-init-data': initData } });
+
+// Weekly leaderboard — public read
+export const getWeeklyLeaderboard = (userId) =>
+  API.get(`/api/leaderboard${userId ? `?user_id=${userId}` : ''}`);
+
+// Weekly Challenge — admin settings + results
+export const getAdminWeeklyChallengeSettings = (initData) =>
+  API.get('/api/admin/weekly-challenge/settings', { headers: { 'x-telegram-init-data': initData } });
+export const updateAdminWeeklyChallengeSettings = (initData, settings) =>
+  API.post('/api/admin/weekly-challenge/settings', settings, { headers: { 'x-telegram-init-data': initData } });
+export const getAdminWeeklyChallengeResults = (initData, weekKey) =>
+  API.get(`/api/admin/weekly-challenge/results${weekKey ? `?week_key=${weekKey}` : ''}`, { headers: { 'x-telegram-init-data': initData } });
