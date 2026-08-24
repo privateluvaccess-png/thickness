@@ -34,18 +34,10 @@ async function updateSettings(fields, adminTelegramId) {
   return data;
 }
 
-// Reuses the exact same ISO-week calculation as the XP ledger, just
-// run against a date 7 days ago — correctly handles year boundaries
-// without any bespoke "previous week" string arithmetic.
 function previousWeekKey() {
   return currentWeekKey(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
 }
 
-// Settles the previous week's top 3 if it hasn't been settled yet.
-// Called opportunistically whenever anyone loads the leaderboard —
-// no cron job needed. The unique constraint on
-// weekly_challenge_settlements.week_key is what actually guarantees
-// "exactly once" even under concurrent calls.
 async function settlePreviousWeekIfNeeded() {
   const settings = await getSettings();
   if (!settings.enabled) return;
@@ -56,7 +48,7 @@ async function settlePreviousWeekIfNeeded() {
     .from('weekly_challenge_settlements')
     .insert({ week_key: weekKey });
   if (gateError) {
-    if (gateError.code === '23505') return; // already settled (or being settled right now)
+    if (gateError.code === '23505') return;
     throw gateError;
   }
 
@@ -67,7 +59,7 @@ async function settlePreviousWeekIfNeeded() {
     .order('xp', { ascending: false })
     .limit(3);
   if (error) throw error;
-  if (!top3 || top3.length === 0) return; // nobody earned XP that week — nothing to settle
+  if (!top3 || top3.length === 0) return;
 
   const rewardDays = [settings.first_place_days, settings.second_place_days, settings.third_place_days];
 
@@ -81,9 +73,30 @@ async function settlePreviousWeekIfNeeded() {
   }
 }
 
-// Top N for the CURRENT (still in progress) week, plus the requesting
-// user's rank and how much XP separates them from #3 — all derived
-// from the same small per-week table, no full-table scans.
+// Seeded users for social proof. These are display-only — they are
+// never written to the DB, so they can NEVER win weekly rewards.
+// Rewards always settle against real users only (settlePreviousWeekIfNeeded
+// queries user_xp_weekly directly). IDs use a string prefix so they
+// can never collide with real Telegram IDs (positive integers).
+//
+// XP is intentionally high to make the top 3 hard to displace.
+// A real user who earns more XP than a seed naturally rises above it —
+// the two lists are merged and sorted together. Real users who crack
+// the top 3 in the DB will get their weekly reward regardless of
+// where the seeds sit, because settlement is DB-only.
+const SEEDED_USERS = [
+  { userId: 'seed_01', displayName: 'anya_xo',      xp: 4820 },
+  { userId: 'seed_02', displayName: 'Mila_real',     xp: 4210 },
+  { userId: 'seed_03', displayName: 'sofia.tm',      xp: 3670 },
+  { userId: 'seed_04', displayName: 'Nastya_v',      xp: 3140 },
+  { userId: 'seed_05', displayName: 'kris_daily',    xp: 2690 },
+  { userId: 'seed_06', displayName: 'Dasha99',       xp: 2210 },
+  { userId: 'seed_07', displayName: 'lera.xo',       xp: 1780 },
+  { userId: 'seed_08', displayName: 'Vika_active',   xp: 1340 },
+  { userId: 'seed_09', displayName: 'polina_tm',     xp: 940  },
+  { userId: 'seed_10', displayName: 'Kate_real',     xp: 580  },
+];
+
 async function getLeaderboard(userId, limit = 10) {
   await settlePreviousWeekIfNeeded().catch(err =>
     console.error('[weeklyChallenge] settlement failed:', err.message)
@@ -109,12 +122,18 @@ async function getLeaderboard(userId, limit = 10) {
     usersById = Object.fromEntries((users || []).map(u => [u.telegram_id, u]));
   }
 
-  const top = (topRows || []).map((r, i) => ({
-    rank: i + 1,
+  const realEntries = (topRows || []).map(r => ({
     userId: r.user_id,
     xp: r.xp,
     displayName: usersById[r.user_id]?.username || usersById[r.user_id]?.first_name || `User ${r.user_id}`,
   }));
+
+  // Merge seeds with real users, sort by XP, re-rank.
+  // Real users who out-earn a seed naturally displace it.
+  const top = [...SEEDED_USERS, ...realEntries]
+    .sort((a, b) => b.xp - a.xp)
+    .slice(0, Math.min(limit, 20))
+    .map((row, i) => ({ ...row, rank: i + 1 }));
 
   let me = null;
   if (userId) {
@@ -132,11 +151,15 @@ async function getLeaderboard(userId, limit = 10) {
       .eq('week_key', weekKey)
       .gt('xp', myXp);
 
+    // Offset the DB rank by however many seeds sit above the user's XP.
+    const seededAbove = SEEDED_USERS.filter(s => s.xp > myXp).length;
+    const adjustedRank = (higherCount || 0) + 1 + seededAbove;
+
     const thirdPlaceXp = top[2]?.xp ?? 0;
     me = {
       xp: myXp,
-      rank: (higherCount || 0) + 1,
-      xpToThirdPlace: (higherCount || 0) >= 3 ? Math.max(0, thirdPlaceXp - myXp) : 0,
+      rank: adjustedRank,
+      xpToThirdPlace: adjustedRank > 3 ? Math.max(0, thirdPlaceXp - myXp) : 0,
     };
   }
 
