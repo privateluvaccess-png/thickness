@@ -17,6 +17,15 @@ function getAdminIds() {
     .filter(Boolean);
 }
 
+// Reusable check for routes that want to know "is this a known admin
+// Telegram ID" without hard-failing the request the way requireAdmin
+// does (e.g. feed gating, where non-admins still get a valid response,
+// just without premium media attached).
+function isAdminId(telegramId) {
+  if (!telegramId) return false;
+  return getAdminIds().includes(String(telegramId));
+}
+
 function requireAdmin(req, res, next) {
   const initData = req.headers['x-telegram-init-data'];
   if (!initData) {
@@ -49,3 +58,4 @@ function requireAdmin(req, res, next) {
 }
 
 module.exports = requireAdmin;
+module.exports.isAdminId = isAdminId;
