@@ -13,8 +13,6 @@ function AppInner({
   isPremium,
   setIsPremium,
   expiresAt,
-  devBoostUnlocked,
-  setDevBoost,
   initData,
   sharedPostId
 }) {
@@ -23,9 +21,6 @@ function AppInner({
   const [isDark, setIsDark] = useState(true);
   const [showLangMenu, setShowLangMenu] = useState(false);
   const [navigateToPostId, setNavigateToPostId] = useState(null);
-  const [showDevPrompt, setShowDevPrompt] = useState(false);
-  const [devPassword, setDevPassword] = useState('');
-  const [devError, setDevError] = useState('');
   const [activeSection, setActiveSection] = useState('feed');
 
   // If the app was opened via a shared-post link, make sure we're on
@@ -37,14 +32,9 @@ function AppInner({
     }
   }, [sharedPostId]);
 
-  const DEV_PASSWORD =
-    import.meta.env.VITE_DEV_PASSWORD || 'thickness_dev';
-
   const ADMIN_TG_ID =
     import.meta.env.VITE_ADMIN_TELEGRAM_ID;
 
-  const tapCount = useRef(0);
-  const tapTimer = useRef(null);
 
   useEffect(() => {
     if (isDark) {
@@ -53,34 +43,6 @@ function AppInner({
       document.documentElement.classList.add('light');
     }
   }, [isDark]);
-
-  function handleLogoTap() {
-    tapCount.current += 1;
-
-    clearTimeout(tapTimer.current);
-
-    if (tapCount.current >= 7) {
-      tapCount.current = 0;
-      setShowDevPrompt(true);
-      setDevPassword('');
-      setDevError('');
-    } else {
-      tapTimer.current = setTimeout(() => {
-        tapCount.current = 0;
-      }, 2000);
-    }
-  }
-
-  function handleDevPasswordSubmit() {
-    if (devPassword === DEV_PASSWORD) {
-      setDevBoost(true);
-      setShowDevPrompt(false);
-      setDevError('');
-    } else {
-      setDevError('Wrong password.');
-      setDevPassword('');
-    }
-  }
 
   const isAdmin =
     ADMIN_TG_ID &&
@@ -103,14 +65,12 @@ function AppInner({
         <img
           src={logo}
           alt="Thickness"
-          onClick={handleLogoTap}
           style={{
             height: 36,
             width: 'auto',
             maxWidth: '55%',
             objectFit: 'contain',
-            objectPosition: 'left center',
-            cursor: 'pointer'
+            objectPosition: 'left center'
           }}
         />
 
@@ -162,8 +122,6 @@ function AppInner({
             user={user}
             isPremium={isPremium}
             expiresAt={expiresAt}
-            devBoostUnlocked={devBoostUnlocked}
-            onDevBoost={() => setDevBoost(true)}
             onNavigate={(postId) =>
               setNavigateToPostId(postId)
             }
@@ -239,58 +197,6 @@ function AppInner({
         </button>
       </div>
 
-      {/* DevBoost password modal */}
-      {showDevPrompt && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 px-8"
-          style={{ touchAction: 'none' }}
-        >
-          <div className="bg-zinc-900 rounded-2xl p-6 w-full flex flex-col gap-4 border border-zinc-700">
-
-            <p className="text-white font-bold text-center text-base">
-              🔐 Developer Access
-            </p>
-
-            <input
-              type="password"
-              value={devPassword}
-              onChange={e => {
-                setDevPassword(e.target.value);
-                setDevError('');
-              }}
-              onKeyDown={e =>
-                e.key === 'Enter' &&
-                handleDevPasswordSubmit()
-              }
-              placeholder="Enter password"
-              autoFocus
-              className="bg-zinc-800 text-white text-sm rounded-xl px-4 py-3 outline-none border border-zinc-700 placeholder-gray-600"
-            />
-
-            {devError && (
-              <p className="text-red-400 text-xs text-center">
-                {devError}
-              </p>
-            )}
-
-            <button
-              onClick={handleDevPasswordSubmit}
-              className="w-full py-3 rounded-xl bg-amber-500 text-black text-sm font-bold"
-            >
-              Unlock
-            </button>
-
-            <button
-              onClick={() => setShowDevPrompt(false)}
-              className="w-full py-2 text-gray-500 text-sm"
-            >
-              Cancel
-            </button>
-
-          </div>
-        </div>
-      )}
-
     </div>
   );
 }
@@ -301,7 +207,6 @@ export default function App() {
   const [expiresAt, setExpiresAt] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [devBoostUnlocked, setDevBoost] = useState(false);
 
   // Telegram raw signed initData string.
   const [initData, setInitData] = useState(null);
@@ -476,8 +381,6 @@ export default function App() {
         isPremium={isPremium}
         setIsPremium={setIsPremium}
         expiresAt={expiresAt}
-        devBoostUnlocked={devBoostUnlocked}
-        setDevBoost={setDevBoost}
         initData={initData}
         sharedPostId={sharedPostId}
       />
