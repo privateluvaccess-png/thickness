@@ -11,7 +11,7 @@ function extractUrl(text) {
   return match ? match[0] : null;
 }
 
-export default function PostCard({ post, isPremium, userId, onLockTap, isAdmin, onDeleted, postRef, adUrl }) {
+export default function PostCard({ post, isPremium, userId, onLockTap, isAdmin, initData, onDeleted, postRef, adUrl }) {
   const isLocked = post.tier === 'premium' && !isPremium;
   const [mediaUrl, setMediaUrl]     = useState(null);
   const [mediaError, setMediaError] = useState(false);
@@ -31,11 +31,10 @@ export default function PostCard({ post, isPremium, userId, onLockTap, isAdmin, 
   }, [post.media_url, post.file_id, isLocked]);
 
   async function handleDelete() {
-    const secret = window.prompt('Enter admin secret to delete this post:');
-    if (!secret) return;
+    if (!window.confirm('Delete this post? This cannot be undone.')) return;
     setDeleting(true);
     try {
-      await deletePost(post.id, secret);
+      await deletePost(post.id, initData);
       onDeleted?.(post.id);
     } catch (err) {
       alert(err?.response?.data?.error || 'Failed to delete post.');
