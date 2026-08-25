@@ -1,9 +1,10 @@
 const router = require('express').Router();
-const { getFeed, getPostById, deletePostById, getPinnedNewUserPosts } = require('../../modules/posts');
+const { getFeed, getPostById, deletePostById, getPinnedNewUserPosts, getPremiumTeaserPosts } = require('../../modules/posts');
 const { getUserById } = require('../../modules/users');
 const { checkSubscription } = require('../../modules/subscriptions');
 const { isNewUser } = require('../../modules/newUser');
 const requireAdmin = require('../../middleware/requireAdmin');
+const { isAdminId } = require('../../middleware/requireAdmin');
 
 // Proxy Telegram file so the frontend can display images/videos.
 // TELEGRAM_API_ROOT points at a self-hosted telegram-bot-api instance
@@ -60,6 +61,10 @@ router.get('/feed', async (req, res) => {
 
     let newUserFlag = false;
     let premiumFlag = false;
+    // Admin always sees full media (they need it for moderation in the
+    // Channel Admin panel), same as the free/premium tab logic on the
+    // frontend already assumes.
+    const adminFlag = isAdminId(user_id);
     if (user_id) {
       const [user, subscription] = await Promise.all([
         getUserById(user_id),
@@ -72,8 +77,24 @@ router.get('/feed', async (req, res) => {
     const posts = await getFeed(
       tier && tier !== 'all' ? tier : null,
       user_id || null,
-      { isNewUser: newUserFlag, isPremiumUser: premiumFlag }
+      { isNewUser: newUserFlag, isPremiumUser: premiumFlag, isAdmin: adminFlag }
     );
+    res.json({ success: true, posts });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Small, capped, real-media preview of Premium posts for the free-tier
+// "scroll to unlock a free video" teaser feature. Deliberately public
+// (no premium check — that's the point, it's the free sample) but
+// bounded server-side (see TEASER_POOL_LIMIT in modules/posts) so it
+// can never become a way to pull the entire premium catalog, unlike the
+// old approach of feeding the whole premium feed to the client and only
+// hiding most of it in the UI.
+router.get('/teaser', async (req, res) => {
+  try {
+    const posts = await getPremiumTeaserPosts();
     res.json({ success: true, posts });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -106,10 +127,24 @@ router.delete('/:post_id', requireAdmin, async (req, res) => {
   }
 });
 
+// Used for deep-link navigation (navigateToPostId in Feed.jsx). Same
+// media-stripping rule as /feed applies here — a direct-by-ID lookup
+// must not be a way around the paywall either.
 router.get('/:post_id', async (req, res) => {
   try {
+    const { user_id } = req.query;
     const post = await getPostById(req.params.post_id);
     if (!post) return res.status(404).json({ error: 'Post not found' });
+
+    if (post.tier === 'premium') {
+      const adminFlag = isAdminId(user_id);
+      const subscription = user_id ? await checkSubscription(user_id) : { isPremium: false };
+      if (!subscription.isPremium && !adminFlag) {
+        const { media_url, file_id, ...rest } = post;
+        return res.json({ success: true, post: { ...rest, locked: true } });
+      }
+    }
+
     res.json({ success: true, post });
   } catch (err) {
     res.status(500).json({ error: err.message });
