@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { toggleLike, toggleBookmark } from '../api';
+import { toggleLike, toggleBookmark, recordShare } from '../api';
 
 const BOT_USERNAME = import.meta.env.VITE_BOT_USERNAME;
 
@@ -49,6 +49,12 @@ export default function PostActions({ post, userId }) {
     const deepLink = `https://t.me/${BOT_USERNAME}?start=post_${post.id}`;
     const shareText = post.caption ? post.caption.slice(0, 120) : 'Check this out on Thickness!';
     const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(deepLink)}&text=${encodeURIComponent(shareText)}`;
+
+    // Fire-and-forget — mission credit for sharing. We can't know if
+    // they actually picked someone in the share sheet (Telegram
+    // doesn't tell us), so this counts "opened the share sheet" as
+    // the action, same trust level as watching a rewarded ad.
+    recordShare(userId, post.id).catch(() => {});
 
     if (window.Telegram?.WebApp?.openTelegramLink) {
       window.Telegram.WebApp.openTelegramLink(shareUrl);
