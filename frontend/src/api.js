@@ -79,6 +79,8 @@ export const updateAdminGiftHuntSettings = (initData, settings) =>
 
 // Missions — public read
 export const getMissionsToday = (userId) => API.get(`/api/missions/today/${userId}`);
+export const recordShare = (userId, postId) =>
+  API.post(`/api/missions/share/${userId}`, { post_id: postId });
 
 // Missions — admin CRUD
 export const getAdminMissions = (initData) =>
