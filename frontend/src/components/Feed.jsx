@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import PostCard from './PostCard';
 import PremiumGate from './PremiumGate';
-import { getFreeFeed, getFullFeed, getActiveLink, getPinnedNewUserPosts } from '../api';
+import { getFreeFeed, getFullFeed, getTeaserPosts, getActiveLink, getPinnedNewUserPosts } from '../api';
 import { useLanguage } from '../i18n/LanguageContext';
 import giftBox from '../assets/adbox.webp';
 
@@ -291,7 +291,7 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, initD
   const [pinnedPosts,  setPinnedPosts]  = useState([]);
 
   // Scroll-to-unlock teaser feature (free users only)
-  const TEASER_THRESHOLD = 7;
+  const TEASER_THRESHOLD = 5;
   const [teaserPool,       setTeaserPool]       = useState([]);
   const [viewedCount,      setViewedCount]      = useState(0);
   const [teaserIndex,      setTeaserIndex]      = useState(0);
@@ -322,9 +322,12 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, initD
         } else {
           // Free users don't get the full premium tab, but we still need
           // a small pool of premium posts to rotate through for the
-          // scroll-to-unlock teaser feature.
-          const teaserRes = await getFullFeed(telegramId);
-          setTeaserPool((teaserRes.data.posts || []).filter(p => p.tier === 'premium'));
+          // scroll-to-unlock teaser feature. This hits a dedicated,
+          // server-capped endpoint rather than the full premium feed —
+          // the full feed no longer sends real media to non-Premium
+          // users at all.
+          const teaserRes = await getTeaserPosts();
+          setTeaserPool(teaserRes.data.posts || []);
         }
       } catch (err) {
         console.error(err);
