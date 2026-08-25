@@ -77,7 +77,18 @@ async function syncPost(message, tier) {
   return data;
 }
 
-async function getFeed(tier, userId, { isNewUser = false, isPremiumUser = false } = {}) {
+// Premium-tier posts carry the actual paywalled media. `media_url` /
+// `file_id` must never leave the server for a request that isn't from
+// a verified Premium user or admin — the frontend's tab-switch/lock-icon
+// UI is a convenience, not a security boundary. Anyone can call this
+// endpoint directly (devtools, curl) and skip the frontend entirely, so
+// the strip has to happen here, not in Feed.jsx.
+function stripPremiumMedia(post) {
+  const { media_url, file_id, ...rest } = post;
+  return { ...rest, locked: true };
+}
+
+async function getFeed(tier, userId, { isNewUser = false, isPremiumUser = false, isAdmin = false } = {}) {
   let query = supabase
     .from('posts')
     .select('*');
@@ -96,11 +107,20 @@ async function getFeed(tier, userId, { isNewUser = false, isPremiumUser = false 
   // users still inside their new-user window; 'premium' only to
   // Premium users (orthogonal to `tier`, which drives the free/premium
   // feed tabs themselves — a post can be free-tier AND premium-audience).
-  const posts = allPosts.filter(p => {
+  let posts = allPosts.filter(p => {
     if (p.audience === 'new_users') return isNewUser;
     if (p.audience === 'premium') return isPremiumUser;
     return true;
   });
+
+  // The real paywall enforcement: strip media from premium-tier posts
+  // unless the requester is verified Premium (or admin, who always sees
+  // everything — see getAdminFeedBypass below). Metadata (caption, seed
+  // counts, etc.) stays so the UI can still render a locked placeholder.
+  const canSeePremiumMedia = isPremiumUser || isAdmin;
+  if (tier === 'premium' && !canSeePremiumMedia) {
+    posts = posts.map(stripPremiumMedia);
+  }
 
   // If userId provided, fetch which posts the user liked and bookmarked
   if (userId) {
@@ -122,6 +142,30 @@ async function getFeed(tier, userId, { isNewUser = false, isPremiumUser = false 
   }
 
   return posts;
+}
+
+// Scroll-to-unlock teaser feature (Feed.jsx's TeaserUnlock): free users
+// get a small, deliberately-capped rotating pool of real premium media
+// as a promo, NOT the entire premium catalog. This used to be implemented
+// by fetching the full premium feed client-side and only *rendering* one
+// post at a time — which meant the complete premium archive (every
+// media_url) was already sitting in the browser's network tab for any
+// free user to inspect. This endpoint replaces that: it's the only place
+// unverified users legitimately get real premium media_urls, and it's
+// capped at TEASER_POOL_LIMIT regardless of how large the premium
+// catalog grows.
+const TEASER_POOL_LIMIT = 8;
+
+async function getPremiumTeaserPosts() {
+  const { data } = await supabase
+    .from('posts')
+    .select('*')
+    .eq('tier', 'premium')
+    .neq('audience', 'premium') // don't leak premium-audience-only posts via the teaser
+    .order('created_at', { ascending: false })
+    .limit(TEASER_POOL_LIMIT);
+
+  return data || [];
 }
 
 async function getPostById(postId) {
@@ -222,5 +266,5 @@ async function deletePostById(postId) {
 
 module.exports = {
   syncPost, deletePost, deletePostById, getFeed, getPostById, getPostsAdmin,
-  getPinnedNewUserPosts, setPostAudience, setPostPin,
+  getPinnedNewUserPosts, setPostAudience, setPostPin, getPremiumTeaserPosts,
 };
