@@ -447,6 +447,25 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, initD
     );
   }
 
+  // Render-time guard, not just a click-time one: the tab button below
+  // only calls setShowGate(true) at the moment it's tapped, so if
+  // activeTab ever ends up 'premium' through any other path (state
+  // surviving a re-render, isPremium/isAdmin flipping after the tab was
+  // already selected, etc.) the paywall still has to hold. The backend
+  // already refuses to send real media to anyone not verified Premium/
+  // admin, but a free user should never even see the locked-post shell
+  // of the Premium tab — they should see the paywall, same as clicking
+  // the tab fresh would show.
+  if (activeTab === 'premium' && !isPremium && !isAdmin) {
+    return (
+      <PremiumGate
+        telegramId={telegramId}
+        onUnlocked={() => { setActiveTab('premium'); onUnlocked(); }}
+        onBack={() => setActiveTab('free')}
+      />
+    );
+  }
+
   const displayed = activeTab === 'free' ? freePosts : premiumPosts;
   const totalPages = Math.max(1, Math.ceil(displayed.length / POSTS_PER_PAGE));
   const pageStart = (currentPage - 1) * POSTS_PER_PAGE;
