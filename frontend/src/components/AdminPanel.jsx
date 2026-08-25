@@ -498,7 +498,8 @@ function WeeklyChallengeSection({ initData }) {
 
 // Missions manager — list, add, toggle active, delete. Note:
 // requirementType must match a type the backend actually tracks
-// (watch_ad, like_post, bookmark_post) or progress will never move.
+// (watch_ad, like_post, bookmark_post, share, buy_premium) or
+// progress will never move.
 function MissionsSection({ initData }) {
   const [missions, setMissions] = useState([]);
   const [loading, setLoading]   = useState(true);
@@ -591,6 +592,8 @@ function MissionsSection({ initData }) {
             <option value="watch_ad">Watch rewarded ads</option>
             <option value="like_post">Like posts</option>
             <option value="bookmark_post">Bookmark posts</option>
+            <option value="share">Share posts</option>
+            <option value="buy_premium">Buy Premium</option>
           </select>
           <div className="flex gap-2">
             <input
