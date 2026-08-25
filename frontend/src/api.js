@@ -9,6 +9,12 @@ export const loginUser             = (initData)               => API.post('/api/
 export const getUser               = (telegramId)             => API.get(`/api/users/${telegramId}`);
 export const getFreeFeed           = (userId)                => API.get(`/api/posts/feed?tier=free${userId ? `&user_id=${userId}` : ''}`);
 export const getFullFeed           = (userId)                => API.get(`/api/posts/feed?tier=premium${userId ? `&user_id=${userId}` : ''}`);
+// Small, capped, real-media sample of Premium posts — powers the
+// "scroll to unlock a free video" teaser for non-Premium users. Unlike
+// getFullFeed, this is meant to return real media to non-Premium users
+// (that's the whole point of the promo), but the backend caps how many
+// posts it hands out so it can never become a full-catalog leak.
+export const getTeaserPosts        = ()                      => API.get(`/api/posts/teaser`);
 export const getPost               = (postId)                 => API.get(`/api/posts/${postId}`);
 export const getSubscription       = (telegramId)             => API.get(`/api/subscriptions/${telegramId}`);
 export const createInvoice         = (telegramId, productKey) => API.post('/api/payments/invoice', { telegram_id: telegramId, product_key: productKey });
