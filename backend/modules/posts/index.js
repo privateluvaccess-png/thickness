@@ -88,30 +88,52 @@ function stripPremiumMedia(post) {
   return { ...rest, locked: true };
 }
 
-async function getFeed(tier, userId, { isNewUser = false, isPremiumUser = false, isAdmin = false } = {}) {
+// Which `audience` values this viewer is allowed to see. Matches the
+// domain enforced by setPostAudience(): a post's audience is always one
+// of null/undefined (legacy rows), 'everyone', 'new_users', or 'premium'.
+// Built as a real SQL filter (rather than fetching everything and
+// filtering in JS) so that LIMIT/OFFSET pagination and the total COUNT
+// below both land on the exact same eligible set — otherwise a page
+// could come back with fewer than `limit` visible posts, and `total`
+// would count posts the viewer isn't even allowed to see.
+function audienceFilter(query, { isNewUser, isPremiumUser }) {
+  const clauses = ['audience.is.null', 'audience.eq.everyone'];
+  if (isNewUser) clauses.push('audience.eq.new_users');
+  if (isPremiumUser) clauses.push('audience.eq.premium');
+  return query.or(clauses.join(','));
+}
+
+const FEED_MAX_LIMIT = 50;
+
+// Paginated main feed. `offset`/`limit` are plain LIMIT/OFFSET (not
+// keyset/cursor like getPostsAdmin below) because this feed needs true
+// random-access page jumps (the numbered pager lets a user tap page 47
+// directly) which a cursor chain can't do without walking every page in
+// between. At this table's realistic size (total posts, not total rows
+// in the database) OFFSET pagination on an indexed created_at column is
+// cheap — this would need reconsidering if the feed ever needed to page
+// tens of thousands deep.
+async function getFeed(tier, userId, { isNewUser = false, isPremiumUser = false, isAdmin = false, limit = 5, offset = 0 } = {}) {
+  const safeLimit  = Math.min(Math.max(parseInt(limit) || 5, 1), FEED_MAX_LIMIT);
+  const safeOffset = Math.max(parseInt(offset) || 0, 0);
+
   let query = supabase
     .from('posts')
-    .select('*');
+    .select('*', { count: 'exact' });
 
   if (tier === 'free' || tier === 'premium') {
     query = query.eq('tier', tier);
   }
+  query = audienceFilter(query, { isNewUser, isPremiumUser });
 
-  const { data: allPosts } = await query
+  const { data, count, error } = await query
     .order('created_at', { ascending: false })
-    .limit(50);
+    .range(safeOffset, safeOffset + safeLimit - 1);
 
-  if (!allPosts) return [];
+  if (error) throw error;
+  if (!data) return { posts: [], total: 0 };
 
-  // Audience filtering: 'everyone' always shows; 'new_users' only to
-  // users still inside their new-user window; 'premium' only to
-  // Premium users (orthogonal to `tier`, which drives the free/premium
-  // feed tabs themselves — a post can be free-tier AND premium-audience).
-  let posts = allPosts.filter(p => {
-    if (p.audience === 'new_users') return isNewUser;
-    if (p.audience === 'premium') return isPremiumUser;
-    return true;
-  });
+  let posts = data;
 
   // The real paywall enforcement: strip media from premium-tier posts
   // unless the requester is verified Premium (or admin, who always sees
@@ -122,8 +144,9 @@ async function getFeed(tier, userId, { isNewUser = false, isPremiumUser = false,
     posts = posts.map(stripPremiumMedia);
   }
 
-  // If userId provided, fetch which posts the user liked and bookmarked
-  if (userId) {
+  // If userId provided, fetch which posts (on THIS page only) the user
+  // liked and bookmarked.
+  if (userId && posts.length > 0) {
     const postIds = posts.map(p => p.id);
 
     const [likesRes, bookmarksRes] = await Promise.all([
@@ -134,14 +157,40 @@ async function getFeed(tier, userId, { isNewUser = false, isPremiumUser = false,
     const likedSet     = new Set((likesRes.data     || []).map(r => r.post_id));
     const bookmarkedSet = new Set((bookmarksRes.data || []).map(r => r.post_id));
 
-    return posts.map(p => ({
+    posts = posts.map(p => ({
       ...p,
       user_liked:      likedSet.has(p.id),
       user_bookmarked: bookmarkedSet.has(p.id),
     }));
   }
 
-  return posts;
+  return { posts, total: count || 0 };
+}
+
+// Deep-link support: given a specific post, figure out which page of its
+// OWN tier's feed it falls on for this viewer, without pulling the whole
+// feed to the client just to find one post's index. Since the feed is
+// ordered created_at DESC, a post's 0-based offset in that ordering is
+// just "how many eligible posts have a strictly newer created_at" — one
+// indexed COUNT query, not a full table scan.
+async function getPostPageNumber(postId, { isNewUser = false, isPremiumUser = false, isAdmin = false, limit = 5 } = {}) {
+  const safeLimit = Math.min(Math.max(parseInt(limit) || 5, 1), FEED_MAX_LIMIT);
+
+  const post = await getPostById(postId);
+  if (!post) return null;
+
+  let query = supabase
+    .from('posts')
+    .select('id', { count: 'exact', head: true })
+    .eq('tier', post.tier)
+    .gt('created_at', post.created_at);
+  query = audienceFilter(query, { isNewUser, isPremiumUser });
+
+  const { count, error } = await query;
+  if (error) throw error;
+
+  const offset = count || 0;
+  return { tier: post.tier, offset, page: Math.floor(offset / safeLimit) + 1 };
 }
 
 // Scroll-to-unlock teaser feature (Feed.jsx's TeaserUnlock): free users
@@ -267,4 +316,5 @@ async function deletePostById(postId) {
 module.exports = {
   syncPost, deletePost, deletePostById, getFeed, getPostById, getPostsAdmin,
   getPinnedNewUserPosts, setPostAudience, setPostPin, getPremiumTeaserPosts,
+  getPostPageNumber,
 };
