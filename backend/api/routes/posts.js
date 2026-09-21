@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const { getFeed, getPostById, deletePostById, getPinnedNewUserPosts, getPremiumTeaserPosts } = require('../../modules/posts');
+const { getFeed, getPostById, deletePostById, getPinnedNewUserPosts, getPremiumTeaserPosts, getPostPageNumber } = require('../../modules/posts');
 const { getUserById } = require('../../modules/users');
 const { checkSubscription } = require('../../modules/subscriptions');
 const { isNewUser } = require('../../modules/newUser');
@@ -57,7 +57,7 @@ router.get('/media/:file_id', async (req, res) => {
 
 router.get('/feed', async (req, res) => {
   try {
-    const { tier, user_id } = req.query;
+    const { tier, user_id, page, limit } = req.query;
 
     let newUserFlag = false;
     let premiumFlag = false;
@@ -74,12 +74,48 @@ router.get('/feed', async (req, res) => {
       premiumFlag = !!subscription.isPremium;
     }
 
-    const posts = await getFeed(
+    const safePage  = Math.max(parseInt(page) || 1, 1);
+    const safeLimit = parseInt(limit) || 5; // clamped again inside getFeed
+    const offset    = (safePage - 1) * safeLimit;
+
+    const { posts, total } = await getFeed(
       tier && tier !== 'all' ? tier : null,
       user_id || null,
-      { isNewUser: newUserFlag, isPremiumUser: premiumFlag, isAdmin: adminFlag }
+      { isNewUser: newUserFlag, isPremiumUser: premiumFlag, isAdmin: adminFlag, limit: safeLimit, offset }
     );
-    res.json({ success: true, posts });
+    res.json({ success: true, posts, total, page: safePage, pageSize: safeLimit });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Deep-link support (navigateToPostId in Feed.jsx): given a post the
+// frontend wants to jump straight to, tells it which page of that post's
+// own tier feed to load, without ever fetching the whole feed client-side
+// just to find one post's index.
+router.get('/:post_id/page', async (req, res) => {
+  try {
+    const { user_id, limit } = req.query;
+
+    let newUserFlag = false;
+    let premiumFlag = false;
+    const adminFlag = isAdminId(user_id);
+    if (user_id) {
+      const [user, subscription] = await Promise.all([
+        getUserById(user_id),
+        checkSubscription(user_id),
+      ]);
+      newUserFlag = await isNewUser(user);
+      premiumFlag = !!subscription.isPremium;
+    }
+
+    const result = await getPostPageNumber(req.params.post_id, {
+      isNewUser: newUserFlag, isPremiumUser: premiumFlag, isAdmin: adminFlag,
+      limit: parseInt(limit) || 5,
+    });
+    if (!result) return res.status(404).json({ error: 'Post not found' });
+
+    res.json({ success: true, ...result });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
