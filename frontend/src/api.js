@@ -7,8 +7,19 @@ const API = axios.create({
 
 export const loginUser             = (initData)               => API.post('/api/users/login', { init_data: initData });
 export const getUser               = (telegramId)             => API.get(`/api/users/${telegramId}`);
-export const getFreeFeed           = (userId)                => API.get(`/api/posts/feed?tier=free${userId ? `&user_id=${userId}` : ''}`);
-export const getFullFeed           = (userId)                => API.get(`/api/posts/feed?tier=premium${userId ? `&user_id=${userId}` : ''}`);
+// page/limit are optional — omitting them keeps the old "page 1, default
+// size" behavior, so any other caller of these two functions doesn't need
+// to change. Response now also carries `total` (how many posts exist for
+// this viewer across ALL pages, not just this one) so the frontend can
+// size its pager without ever holding more than one page in memory.
+export const getFreeFeed           = (userId, { page, limit } = {}) =>
+  API.get(`/api/posts/feed?tier=free${userId ? `&user_id=${userId}` : ''}${page ? `&page=${page}` : ''}${limit ? `&limit=${limit}` : ''}`);
+export const getFullFeed           = (userId, { page, limit } = {}) =>
+  API.get(`/api/posts/feed?tier=premium${userId ? `&user_id=${userId}` : ''}${page ? `&page=${page}` : ''}${limit ? `&limit=${limit}` : ''}`);
+// Deep-link support: which page (of its own tier's feed) a specific post
+// falls on for this viewer — see posts.js's `/:post_id/page` route.
+export const getPostPage           = (postId, userId, limit) =>
+  API.get(`/api/posts/${postId}/page?${userId ? `user_id=${userId}&` : ''}${limit ? `limit=${limit}` : ''}`);
 // Small, capped, real-media sample of Premium posts — powers the
 // "scroll to unlock a free video" teaser for non-Premium users. Unlike
 // getFullFeed, this is meant to return real media to non-Premium users
