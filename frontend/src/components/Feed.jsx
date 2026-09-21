@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import PostCard from './PostCard';
 import PremiumGate from './PremiumGate';
-import { getFreeFeed, getFullFeed, getTeaserPosts, getActiveLink, getPinnedNewUserPosts } from '../api';
+import { getFreeFeed, getFullFeed, getTeaserPosts, getActiveLink, getPinnedNewUserPosts, getPostPage } from '../api';
 import { useLanguage } from '../i18n/LanguageContext';
 import giftBox from '../assets/adbox.webp';
 
@@ -281,14 +281,25 @@ function Pagination({ currentPage, totalPages, onPageChange }) {
 
 export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, initData, navigateToPostId, onNavigated }) {
   const { t } = useLanguage();
+  // freePosts/premiumPosts now hold only the CURRENT PAGE for that tab —
+  // the feed can run to hundreds of posts, so the whole thing is never
+  // pulled into the browser at once. freeTotal/premiumTotal are the
+  // server's count of ALL posts this viewer can see on that tab (across
+  // every page), used only to size the pager.
   const [freePosts,    setFreePosts]    = useState([]);
   const [premiumPosts, setPremiumPosts] = useState([]);
-  const [loading,      setLoading]      = useState(true);
+  const [freeTotal,    setFreeTotal]    = useState(0);
+  const [premiumTotal, setPremiumTotal] = useState(0);
+  const [loading,      setLoading]      = useState(true);   // true only for the very first page ever loaded
+  const [pageLoading,  setPageLoading]  = useState(false);  // true while switching page/tab after that
   const [showGate,     setShowGate]     = useState(false);
   const [activeTab,    setActiveTab]    = useState('free');
   const [overlayUrl,   setOverlayUrl]   = useState(null);
   const [currentPage,  setCurrentPage]  = useState(1);
   const [pinnedPosts,  setPinnedPosts]  = useState([]);
+  // Pages already fetched this session, per tab — revisiting a page (e.g.
+  // paging back) reuses it instead of re-requesting it.
+  const feedCache = useRef({ free: new Map(), premium: new Map() });
 
   // Scroll-to-unlock teaser feature (free users only)
   const TEASER_THRESHOLD = 5;
@@ -301,6 +312,19 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, initD
   const postRefs = useRef({});
   const scrollRef = useRef(null);
 
+  // The teaser pool (free users only) doesn't depend on pagination at
+  // all — fetched once, independently of which feed page is showing.
+  useEffect(() => {
+    if (!telegramId || isPremium || isAdmin) return;
+    getTeaserPosts()
+      .then(res => setTeaserPool(res.data.posts || []))
+      .catch(err => console.error(err));
+  }, [isPremium, isAdmin, telegramId]);
+
+  // Fetches ONE page of ONE tab from the server, using the cache when
+  // that exact page has already been loaded this session. Runs whenever
+  // the visible tab or page number changes — never fetches a tab the
+  // viewer isn't currently looking at.
   useEffect(() => {
     // Wait until we actually know who's logged in — fetching before
     // telegramId is available (e.g. right after opening/reopening the
@@ -310,45 +334,73 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, initD
     // login finished — making likes/bookmarks look "lost" even though
     // they were saved correctly server-side the whole time.
     if (!telegramId) return;
+    // Free users never actually see the premium tab's post list (they
+    // get PremiumGate instead — see the render guard below), so don't
+    // spend a request fetching it.
+    if (activeTab === 'premium' && !isPremium && !isAdmin) return;
 
+    const tab = activeTab;
+    const page = currentPage;
+    const cache = feedCache.current[tab];
+
+    const cached = cache.get(page);
+    if (cached) {
+      (tab === 'free' ? setFreePosts : setPremiumPosts)(cached.posts);
+      (tab === 'free' ? setFreeTotal : setPremiumTotal)(cached.total);
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
     async function load() {
+      const isFirstEver = freeTotal === 0 && premiumTotal === 0 && cache.size === 0
+        && feedCache.current[tab === 'free' ? 'premium' : 'free'].size === 0;
+      if (isFirstEver) setLoading(true); else setPageLoading(true);
+
       try {
-        setLoading(true);
-        const freeRes = await getFreeFeed(telegramId);
-        setFreePosts((freeRes.data.posts || []).filter(p => p.tier === 'free'));
-        if (isPremium || isAdmin) {
-          const fullRes = await getFullFeed(telegramId);
-          setPremiumPosts((fullRes.data.posts || []).filter(p => p.tier === 'premium'));
-        } else {
-          // Free users don't get the full premium tab, but we still need
-          // a small pool of premium posts to rotate through for the
-          // scroll-to-unlock teaser feature. This hits a dedicated,
-          // server-capped endpoint rather than the full premium feed —
-          // the full feed no longer sends real media to non-Premium
-          // users at all.
-          const teaserRes = await getTeaserPosts();
-          setTeaserPool(teaserRes.data.posts || []);
-        }
+        const fetcher = tab === 'free' ? getFreeFeed : getFullFeed;
+        const res = await fetcher(telegramId, { page, limit: POSTS_PER_PAGE });
+        if (cancelled) return;
+        const posts = res.data.posts || [];
+        const total = res.data.total || 0;
+        cache.set(page, { posts, total });
+        (tab === 'free' ? setFreePosts : setPremiumPosts)(posts);
+        (tab === 'free' ? setFreeTotal : setPremiumTotal)(total);
       } catch (err) {
         console.error(err);
       } finally {
-        setLoading(false);
+        if (!cancelled) { setLoading(false); setPageLoading(false); }
       }
     }
     load();
-  }, [isPremium, isAdmin, telegramId]);
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, currentPage, telegramId, isPremium, isAdmin]);
 
+  // Deep-link, part 1: ask the server which page this post falls on (it's
+  // no longer sitting in a client-side array of every post — see the
+  // pagination effect above), then switch to that tab/page.
+  useEffect(() => {
+    if (!navigateToPostId || !telegramId) return;
+    let cancelled = false;
+    getPostPage(navigateToPostId, telegramId, POSTS_PER_PAGE)
+      .then(res => {
+        if (cancelled || !res.data?.success) return;
+        setActiveTab(res.data.tier === 'premium' ? 'premium' : 'free');
+        setCurrentPage(res.data.page);
+      })
+      .catch(err => console.error('Failed to locate post for deep link:', err));
+    return () => { cancelled = true; };
+  }, [navigateToPostId, telegramId]);
+
+  // Deep-link, part 2: once that page has actually finished loading and
+  // the target post is among the posts currently rendered, scroll to it.
   useEffect(() => {
     if (!navigateToPostId) return;
-    const allPosts = [...freePosts, ...premiumPosts];
-    const target = allPosts.find(p => p.id === navigateToPostId);
-    if (target) {
-      const tierPosts = target.tier === 'premium' ? premiumPosts : freePosts;
-      const idx = tierPosts.findIndex(p => p.id === navigateToPostId);
-      setActiveTab(target.tier === 'premium' ? 'premium' : 'free');
-      setCurrentPage(Math.floor(idx / POSTS_PER_PAGE) + 1);
-    }
-    setTimeout(() => {
+    const loaded = freePosts.some(p => p.id === navigateToPostId) || premiumPosts.some(p => p.id === navigateToPostId);
+    if (!loaded) return;
+
+    const timeout = setTimeout(() => {
       const el = postRefs.current[navigateToPostId];
       if (el) {
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -357,7 +409,8 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, initD
       }
       onNavigated?.();
     }, 100);
-  }, [navigateToPostId]);
+    return () => clearTimeout(timeout);
+  }, [navigateToPostId, freePosts, premiumPosts]);
 
   useEffect(() => {
     async function fetchLink() {
@@ -427,10 +480,15 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, initD
     return () => observer.disconnect();
   }, [currentPage, activeTab, freePosts, isPremium, isAdmin, teaserPool]);
 
-  // Reset to page 1 whenever the visible tab changes
+  // Reset to page 1 whenever the visible tab changes — EXCEPT when that
+  // tab change was the deep-link effect above landing on a specific
+  // post's tier, which sets activeTab and currentPage together; this
+  // running too would stomp that page number back to 1 right after.
   useEffect(() => {
+    if (navigateToPostId) return;
     setCurrentPage(1);
   }, [activeTab]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
 
   function handlePageChange(page) {
     setCurrentPage(page);
@@ -466,10 +524,13 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, initD
     );
   }
 
-  const displayed = activeTab === 'free' ? freePosts : premiumPosts;
-  const totalPages = Math.max(1, Math.ceil(displayed.length / POSTS_PER_PAGE));
-  const pageStart = (currentPage - 1) * POSTS_PER_PAGE;
-  const pagePosts = displayed.slice(pageStart, pageStart + POSTS_PER_PAGE);
+  // freePosts/premiumPosts already ARE just the current page (fetched
+  // from the server for exactly [activeTab, currentPage] above) — no
+  // client-side slicing needed any more. freeTotal/premiumTotal are the
+  // server's total count for this viewer, used only to size the pager.
+  const pagePosts = activeTab === 'free' ? freePosts : premiumPosts;
+  const total = activeTab === 'free' ? freeTotal : premiumTotal;
+  const totalPages = Math.max(1, Math.ceil(total / POSTS_PER_PAGE));
 
   return (
     <div className="flex flex-col h-full">
@@ -517,12 +578,15 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, initD
 
       {loading ? (
         <p className="text-center text-gray-500 mt-10">{t('loading')}</p>
-      ) : displayed.length === 0 ? (
+      ) : pagePosts.length === 0 && !pageLoading ? (
         <p className="text-center text-gray-500 mt-10">{t('noPosts')}</p>
       ) : (
         <div ref={scrollRef} className="overflow-y-auto pb-20">
           {activeTab === 'free' && !isPremium && !isAdmin && teaserPool.length > 0 && (
             <TeaserProgress viewed={viewedCount} threshold={TEASER_THRESHOLD} />
+          )}
+          {pageLoading && (
+            <p className="text-center text-gray-500 py-6">{t('loading')}</p>
           )}
           {pagePosts.map(post => (
             <PostCard
