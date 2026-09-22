@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import PostCard from './PostCard';
 import PremiumGate from './PremiumGate';
-import { getFreeFeed, getFullFeed, getTeaserPosts, getActiveLink, getPinnedNewUserPosts, getPostPage } from '../api';
+import { getFreeFeed, getFullFeed, getTeaserPosts, getActiveLink, getPinnedNewUserPosts, getPostPage, claimTeaserView } from '../api';
 import { useLanguage } from '../i18n/LanguageContext';
 import giftBox from '../assets/adbox.webp';
 
@@ -305,8 +305,11 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, initD
   const TEASER_THRESHOLD = 5;
   const [teaserPool,       setTeaserPool]       = useState([]);
   const [viewedCount,      setViewedCount]      = useState(0);
-  const [teaserIndex,      setTeaserIndex]      = useState(0);
   const [activeTeaser,     setActiveTeaser]     = useState(null);
+  // Once the server says today's quota is used up, stop even trying —
+  // no point re-hitting /teaser/claim every 5 posts for the rest of the
+  // session; it'll allow again once the date rolls over server-side.
+  const [teaserLimitReached, setTeaserLimitReached] = useState(false);
   const seenPostIds = useRef(new Set());
   const observerRef = useRef(null);
   const postRefs = useRef({});
@@ -442,11 +445,12 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, initD
 
   // Track how many distinct free posts the user has actually scrolled
   // past (50%+ visible), and unlock one premium teaser video every
-  // TEASER_THRESHOLD posts. Only runs for free (non-premium, non-admin)
+  // TEASER_THRESHOLD posts — up to the server's daily cap (see
+  // /api/posts/teaser/claim). Only runs for free (non-premium, non-admin)
   // users, and only while looking at the Free tab.
   useEffect(() => {
     if (isPremium || isAdmin || activeTab !== 'free') return;
-    if (teaserPool.length === 0) return;
+    if (teaserPool.length === 0 || teaserLimitReached) return;
 
     observerRef.current?.disconnect();
     const observer = new IntersectionObserver(
@@ -460,11 +464,16 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, initD
           setViewedCount(prev => {
             const next = prev + 1;
             if (next % TEASER_THRESHOLD === 0) {
-              setTeaserIndex(idx => {
-                const post = teaserPool[idx % teaserPool.length];
-                setActiveTeaser(post);
-                return idx + 1;
-              });
+              // The actual daily-limit check/claim happens server-side,
+              // atomically — this is just what triggers asking. If the
+              // day's quota is already spent, no overlay is shown and
+              // further threshold hits this session stop asking at all.
+              claimTeaserView(telegramId)
+                .then(res => {
+                  if (!res.data?.allowed) { setTeaserLimitReached(true); return; }
+                  if (res.data.post) setActiveTeaser(res.data.post);
+                })
+                .catch(err => console.error('Failed to claim teaser view:', err));
             }
             return next;
           });
@@ -478,7 +487,7 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, initD
     });
     observerRef.current = observer;
     return () => observer.disconnect();
-  }, [currentPage, activeTab, freePosts, isPremium, isAdmin, teaserPool]);
+  }, [currentPage, activeTab, freePosts, isPremium, isAdmin, teaserPool, teaserLimitReached, telegramId]);
 
   // Reset to page 1 whenever the visible tab changes — EXCEPT when that
   // tab change was the deep-link effect above landing on a specific
