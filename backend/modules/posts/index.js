@@ -1,5 +1,6 @@
 const supabase = require('../../supabase');
 const { uploadToR2 } = require('../r2');
+const { getAdSettings } = require('../adSettings');
 
 const TELEGRAM_API_ROOT      = process.env.TELEGRAM_API_ROOT || 'https://api.telegram.org';
 const TELEGRAM_FILE_API_ROOT = process.env.TELEGRAM_FILE_API_ROOT || 'https://api.telegram.org';
@@ -217,11 +218,12 @@ async function getPremiumTeaserPosts() {
   return data || [];
 }
 
-// How many teaser unlocks a single free user gets per calendar day
-// (UTC, matching the DB function's `current_date`). After this many,
-// claimTeaserView() below starts returning allowed:false until the date
-// rolls over.
-const TEASER_DAILY_LIMIT = 5;
+// Fallback used only if the ad_settings row/column is somehow missing —
+// the real, admin-editable value lives in ad_settings.daily_teaser_limit
+// (Admin Panel -> Ad Formats -> "Daily premium teaser limit"), read fresh
+// below on every claim via the same cached getAdSettings() your ad
+// formats/limits already use.
+const TEASER_DAILY_LIMIT_FALLBACK = 5;
 
 // Atomically checks-and-claims one of today's teaser views for this user
 // (see migrations/001_teaser_daily_limit.sql for the actual enforcement —
@@ -229,7 +231,10 @@ const TEASER_DAILY_LIMIT = 5;
 // the increment, not a separate read-then-write from here, so two
 // requests arriving at nearly the same moment can't both slip through
 // one-under-the-limit).
-async function claimTeaserView(userId, maxDaily = TEASER_DAILY_LIMIT) {
+async function claimTeaserView(userId) {
+  const settings = await getAdSettings().catch(() => null);
+  const maxDaily = settings?.daily_teaser_limit || TEASER_DAILY_LIMIT_FALLBACK;
+
   const { data, error } = await supabase.rpc('claim_teaser_view', {
     p_user_id: userId,
     p_max_daily: maxDaily,
@@ -237,7 +242,7 @@ async function claimTeaserView(userId, maxDaily = TEASER_DAILY_LIMIT) {
   if (error) throw error;
 
   const row = data?.[0];
-  return { allowed: !!row?.allowed, viewsToday: row?.views_count ?? 0 };
+  return { allowed: !!row?.allowed, viewsToday: row?.views_count ?? 0, dailyLimit: maxDaily };
 }
 
 async function getPostById(postId) {
@@ -339,5 +344,5 @@ async function deletePostById(postId) {
 module.exports = {
   syncPost, deletePost, deletePostById, getFeed, getPostById, getPostsAdmin,
   getPinnedNewUserPosts, setPostAudience, setPostPin, getPremiumTeaserPosts,
-  getPostPageNumber, claimTeaserView, TEASER_DAILY_LIMIT,
+  getPostPageNumber, claimTeaserView,
 };
