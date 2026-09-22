@@ -305,6 +305,27 @@ function AdsSection({ initData }) {
               className="w-16 bg-zinc-800 text-white text-sm rounded-lg px-2 py-1 text-center outline-none"
             />
           </div>
+
+          {/* Same settings row/table as the ad controls above (kept
+              here so it reuses the same fetch/update plumbing), but a
+              separate feature: how many premium teaser videos a free
+              user can unlock per day by scrolling the feed. */}
+          <div className="mt-1 pt-2 border-t border-zinc-700/50">
+            <span className="text-gray-400 text-xs font-semibold uppercase">Premium Teaser</span>
+          </div>
+          <div className="flex items-center justify-between bg-zinc-900 rounded-lg px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="text-white text-sm">Daily teaser limit (per user)</p>
+              <p className="text-gray-500 text-[11px]">Free users can unlock this many premium teaser videos per day</p>
+            </div>
+            <input
+              type="number"
+              min="1"
+              defaultValue={settings.daily_teaser_limit}
+              onBlur={e => updateNumber('daily_teaser_limit', e.target.value)}
+              className="w-16 flex-shrink-0 bg-zinc-800 text-white text-sm rounded-lg px-2 py-1 text-center outline-none"
+            />
+          </div>
         </div>
       )}
     </div>
