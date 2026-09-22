@@ -26,6 +26,12 @@ export const getPostPage           = (postId, userId, limit) =>
 // (that's the whole point of the promo), but the backend caps how many
 // posts it hands out so it can never become a full-catalog leak.
 export const getTeaserPosts        = ()                      => API.get(`/api/posts/teaser`);
+// Called each time the scroll threshold is actually hit — server checks
+// (and, if allowed, atomically claims) today's teaser-view quota and
+// returns { allowed, post, viewsToday }. This is the real daily-limit
+// enforcement point, not getTeaserPosts above (which just hands out the
+// small rotating pool's metadata, ungated).
+export const claimTeaserView       = (userId)                => API.get(`/api/posts/teaser/claim?user_id=${userId}`);
 export const getPost               = (postId)                 => API.get(`/api/posts/${postId}`);
 export const getSubscription       = (telegramId)             => API.get(`/api/subscriptions/${telegramId}`);
 export const createInvoice         = (telegramId, productKey) => API.post('/api/payments/invoice', { telegram_id: telegramId, product_key: productKey });
