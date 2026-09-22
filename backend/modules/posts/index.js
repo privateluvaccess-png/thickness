@@ -217,6 +217,29 @@ async function getPremiumTeaserPosts() {
   return data || [];
 }
 
+// How many teaser unlocks a single free user gets per calendar day
+// (UTC, matching the DB function's `current_date`). After this many,
+// claimTeaserView() below starts returning allowed:false until the date
+// rolls over.
+const TEASER_DAILY_LIMIT = 5;
+
+// Atomically checks-and-claims one of today's teaser views for this user
+// (see migrations/001_teaser_daily_limit.sql for the actual enforcement —
+// this is deliberately a single DB round trip doing both the check and
+// the increment, not a separate read-then-write from here, so two
+// requests arriving at nearly the same moment can't both slip through
+// one-under-the-limit).
+async function claimTeaserView(userId, maxDaily = TEASER_DAILY_LIMIT) {
+  const { data, error } = await supabase.rpc('claim_teaser_view', {
+    p_user_id: userId,
+    p_max_daily: maxDaily,
+  });
+  if (error) throw error;
+
+  const row = data?.[0];
+  return { allowed: !!row?.allowed, viewsToday: row?.views_count ?? 0 };
+}
+
 async function getPostById(postId) {
   const { data } = await supabase
     .from('posts')
@@ -316,5 +339,5 @@ async function deletePostById(postId) {
 module.exports = {
   syncPost, deletePost, deletePostById, getFeed, getPostById, getPostsAdmin,
   getPinnedNewUserPosts, setPostAudience, setPostPin, getPremiumTeaserPosts,
-  getPostPageNumber,
+  getPostPageNumber, claimTeaserView, TEASER_DAILY_LIMIT,
 };
