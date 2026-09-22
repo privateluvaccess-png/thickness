@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const { getFeed, getPostById, deletePostById, getPinnedNewUserPosts, getPremiumTeaserPosts, getPostPageNumber } = require('../../modules/posts');
+const { getFeed, getPostById, deletePostById, getPinnedNewUserPosts, getPremiumTeaserPosts, getPostPageNumber, claimTeaserView } = require('../../modules/posts');
 const { getUserById } = require('../../modules/users');
 const { checkSubscription } = require('../../modules/subscriptions');
 const { isNewUser } = require('../../modules/newUser');
@@ -132,6 +132,32 @@ router.get('/teaser', async (req, res) => {
   try {
     const posts = await getPremiumTeaserPosts();
     res.json({ success: true, posts });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Called each time the scroll-to-unlock threshold is actually hit (not
+// on every page load) — atomically checks whether this user still has a
+// teaser view left today and, if so, claims one and returns which post
+// to show. This is the real enforcement point for the daily cap; the
+// plain /teaser above only hands out the small rotating POOL (used for
+// the "is the feature available at all" check and the progress bar) and
+// is not itself gated, since browsing the pool's metadata isn't the
+// thing being rationed — actually being shown a full unlocked video is.
+router.get('/teaser/claim', async (req, res) => {
+  try {
+    const { user_id } = req.query;
+    if (!user_id) return res.status(400).json({ error: 'user_id required' });
+
+    const claim = await claimTeaserView(user_id);
+    if (!claim.allowed) {
+      return res.json({ success: true, allowed: false, viewsToday: claim.viewsToday });
+    }
+
+    const pool = await getPremiumTeaserPosts();
+    const post = pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : null;
+    res.json({ success: true, allowed: true, post, viewsToday: claim.viewsToday });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
