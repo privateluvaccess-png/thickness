@@ -7,6 +7,7 @@ import { loginUser, getSubscription, getAdSettings } from './api';
 import { languageLabels, languageOrder } from './i18n/translations';
 import logo from './assets/logo.webp';
 import ProfileButton from './components/ProfileButton';
+import PromoBanner from './components/PromoBanner';
 
 function AppInner({
   user,
@@ -22,6 +23,7 @@ function AppInner({
   const [showLangMenu, setShowLangMenu] = useState(false);
   const [navigateToPostId, setNavigateToPostId] = useState(null);
   const [activeSection, setActiveSection] = useState('feed');
+  const [showPromo, setShowPromo] = useState(true);
 
   // If the app was opened via a shared-post link, make sure we're on
   // the Feed tab and tell Feed to scroll to that post once loaded.
@@ -56,6 +58,8 @@ function AppInner({
         overflow: 'hidden'
       }}
     >
+
+      {showPromo && <PromoBanner onClose={() => setShowPromo(false)} />}
 
       {/* Header */}
       <div
