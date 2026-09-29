@@ -5,6 +5,7 @@ import PremiumGate from './PremiumGate';
 import { getFreeFeed, getFullFeed, getTeaserPosts, getActiveLink, getPinnedNewUserPosts, getPostPage, claimTeaserView } from '../api';
 import { useLanguage } from '../i18n/LanguageContext';
 import giftBox from '../assets/adbox.webp';
+import { openThicknessVibe } from '../config/thicknessvibe';
 
 const BACKEND = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
@@ -582,6 +583,12 @@ export default function Feed({ isPremium, telegramId, onUnlocked, isAdmin, initD
           className={`flex-1 py-3 text-sm font-semibold transition ${activeTab === 'premium' ? 'text-amber-400 border-b-2 border-amber-400' : 'text-gray-500'}`}
         >
           {t('premium')} ⭐
+        </button>
+        <button
+          onClick={openThicknessVibe}
+          className="flex-1 py-3 text-sm font-semibold transition text-sky-400"
+        >
+          💬 {t('chatCreators')}
         </button>
       </div>
 
