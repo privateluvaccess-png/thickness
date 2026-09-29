@@ -1,5 +1,6 @@
 export const translations = {
   en: {
+    chatCreators: 'Chat Creators',
     home: 'Home',
     free: 'Feed',
     premium: 'Premium',
@@ -16,6 +17,7 @@ export const translations = {
     noPosts: 'No posts yet',
   },
   fr: {
+    chatCreators: 'Chat Créateurs',
     home: 'Accueil',
     free: 'Fil',
     premium: 'Premium',
@@ -32,6 +34,7 @@ export const translations = {
     noPosts: 'Aucun post pour l\'instant',
   },
   es: {
+    chatCreators: 'Chat Creadores',
     home: 'Inicio',
     free: 'Feed',
     premium: 'Premium',
@@ -48,6 +51,7 @@ export const translations = {
     noPosts: 'Sin publicaciones aún',
   },
   pt: {
+    chatCreators: 'Chat Criadores',
     home: 'Início',
     free: 'Feed',
     premium: 'Premium',
