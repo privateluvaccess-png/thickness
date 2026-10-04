@@ -1,6 +1,7 @@
 const supabase = require('../../supabase');
 const { uploadToR2 } = require('../r2');
 const { getAdSettings } = require('../adSettings');
+const { arrangeFeed, getRotationConfig } = require('./rotation');
 
 const TELEGRAM_API_ROOT      = process.env.TELEGRAM_API_ROOT || 'https://api.telegram.org';
 const TELEGRAM_FILE_API_ROOT = process.env.TELEGRAM_FILE_API_ROOT || 'https://api.telegram.org';
@@ -114,25 +115,64 @@ const FEED_MAX_LIMIT = 50;
 // in the database) OFFSET pagination on an indexed created_at column is
 // cheap — this would need reconsidering if the feed ever needed to page
 // tens of thousands deep.
+// Light list of every post this viewer is allowed to see (id + created_at
+// only), cached ~60s per tier/audience so paging doesn't re-read the table
+// on every request. Paged in 1000-row chunks to stay under Supabase's cap.
+const eligibleCache = new Map();
+const ELIGIBLE_TTL_MS = 60 * 1000;
+
+async function getEligibleRows(tier, flags) {
+  const key = `${tier || 'all'}:${flags.isNewUser ? 1 : 0}:${flags.isPremiumUser ? 1 : 0}`;
+  const hit = eligibleCache.get(key);
+  if (hit && Date.now() < hit.expiresAt) return hit.rows;
+
+  const rows = [];
+  for (let from = 0; ; from += 1000) {
+    let query = supabase.from('posts').select('id, created_at');
+    if (tier === 'free' || tier === 'premium') query = query.eq('tier', tier);
+    query = audienceFilter(query, flags);
+    const { data, error } = await query
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: true })
+      .range(from, from + 999);
+    if (error) throw error;
+    rows.push(...(data || []));
+    if (!data || data.length < 1000) break;
+  }
+  eligibleCache.set(key, { rows, expiresAt: Date.now() + ELIGIBLE_TTL_MS });
+  return rows;
+}
+
+// The viewer's ordered feed (shuffled daily, resting posts removed).
+// Admins always get plain newest-first with nothing hidden, for moderation.
+async function getOrderedFeedRows(tier, userId, { isNewUser, isPremiumUser, isAdmin }) {
+  const [rows, settings] = await Promise.all([
+    getEligibleRows(tier, { isNewUser, isPremiumUser }),
+    getAdSettings().catch(() => null),
+  ]);
+  const config = getRotationConfig(settings);
+  if (isAdmin) return rows;
+  return arrangeFeed(rows, { viewerKey: userId || 'anon', tier, config });
+}
+
+// Paginated main feed. The order is a per-user daily shuffle (see
+// rotation.js), so paging is done on the ordered id list and then the
+// full rows for just that page are fetched.
 async function getFeed(tier, userId, { isNewUser = false, isPremiumUser = false, isAdmin = false, limit = 5, offset = 0 } = {}) {
   const safeLimit  = Math.min(Math.max(parseInt(limit) || 5, 1), FEED_MAX_LIMIT);
   const safeOffset = Math.max(parseInt(offset) || 0, 0);
 
-  let query = supabase
-    .from('posts')
-    .select('*', { count: 'exact' });
+  const ordered = await getOrderedFeedRows(tier, userId, { isNewUser, isPremiumUser, isAdmin });
+  const count = ordered.length;
+  const pageIds = ordered.slice(safeOffset, safeOffset + safeLimit).map(r => r.id);
 
-  if (tier === 'free' || tier === 'premium') {
-    query = query.eq('tier', tier);
+  let data = [];
+  if (pageIds.length > 0) {
+    const res = await supabase.from('posts').select('*').in('id', pageIds);
+    if (res.error) throw res.error;
+    const byId = new Map((res.data || []).map(p => [p.id, p]));
+    data = pageIds.map(id => byId.get(id)).filter(Boolean);
   }
-  query = audienceFilter(query, { isNewUser, isPremiumUser });
-
-  const { data, count, error } = await query
-    .order('created_at', { ascending: false })
-    .range(safeOffset, safeOffset + safeLimit - 1);
-
-  if (error) throw error;
-  if (!data) return { posts: [], total: 0 };
 
   let posts = data;
 
@@ -174,24 +214,17 @@ async function getFeed(tier, userId, { isNewUser = false, isPremiumUser = false,
 // ordered created_at DESC, a post's 0-based offset in that ordering is
 // just "how many eligible posts have a strictly newer created_at" — one
 // indexed COUNT query, not a full table scan.
-async function getPostPageNumber(postId, { isNewUser = false, isPremiumUser = false, isAdmin = false, limit = 5 } = {}) {
+async function getPostPageNumber(postId, { isNewUser = false, isPremiumUser = false, isAdmin = false, limit = 5, userId = null } = {}) {
   const safeLimit = Math.min(Math.max(parseInt(limit) || 5, 1), FEED_MAX_LIMIT);
 
   const post = await getPostById(postId);
   if (!post) return null;
 
-  let query = supabase
-    .from('posts')
-    .select('id', { count: 'exact', head: true })
-    .eq('tier', post.tier)
-    .gt('created_at', post.created_at);
-  query = audienceFilter(query, { isNewUser, isPremiumUser });
+  const ordered = await getOrderedFeedRows(post.tier, userId, { isNewUser, isPremiumUser, isAdmin });
+  const index = ordered.findIndex(r => r.id === post.id);
+  if (index === -1) return null; // post is resting this week (or not visible to this viewer)
 
-  const { count, error } = await query;
-  if (error) throw error;
-
-  const offset = count || 0;
-  return { tier: post.tier, offset, page: Math.floor(offset / safeLimit) + 1 };
+  return { tier: post.tier, offset: index, page: Math.floor(index / safeLimit) + 1 };
 }
 
 // Scroll-to-unlock teaser feature (Feed.jsx's TeaserUnlock): free users
