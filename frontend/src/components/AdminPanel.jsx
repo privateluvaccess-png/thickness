@@ -326,6 +326,57 @@ function AdsSection({ initData }) {
               className="w-16 flex-shrink-0 bg-zinc-800 text-white text-sm rounded-lg px-2 py-1 text-center outline-none"
             />
           </div>
+
+          <div className="mt-1 pt-2 border-t border-zinc-700/50">
+            <span className="text-gray-400 text-xs font-semibold uppercase">Feed Shuffle</span>
+          </div>
+          <div className="flex items-center justify-between bg-zinc-900 rounded-lg px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="text-white text-sm font-medium">Shuffle feed daily</p>
+              <p className="text-gray-500 text-[11px]">Each user gets a fresh order every day; new uploads (48h) stay on top</p>
+            </div>
+            <button
+              onClick={() => toggle('feed_shuffle_enabled')}
+              disabled={busyKey === 'feed_shuffle_enabled'}
+              className={`flex-shrink-0 w-12 h-7 rounded-full transition-colors relative disabled:opacity-50 ${
+                settings.feed_shuffle_enabled !== false ? 'bg-green-600' : 'bg-zinc-700'
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 w-6 h-6 rounded-full bg-white transition-transform ${
+                  settings.feed_shuffle_enabled !== false ? 'translate-x-5' : 'translate-x-0.5'
+                }`}
+              />
+            </button>
+          </div>
+          <div className="flex items-center justify-between bg-zinc-900 rounded-lg px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="text-white text-sm">Rest weeks</p>
+              <p className="text-gray-500 text-[11px]">Resting videos stay hidden this many weeks, then return</p>
+            </div>
+            <input
+              type="number"
+              min="1"
+              max="8"
+              defaultValue={settings.feed_rest_weeks ?? 2}
+              onBlur={e => updateNumber('feed_rest_weeks', e.target.value)}
+              className="w-16 flex-shrink-0 bg-zinc-800 text-white text-sm rounded-lg px-2 py-1 text-center outline-none"
+            />
+          </div>
+          <div className="flex items-center justify-between bg-zinc-900 rounded-lg px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="text-white text-sm">% resting at a time</p>
+              <p className="text-gray-500 text-[11px]">Share of each feed hidden every week (1-90)</p>
+            </div>
+            <input
+              type="number"
+              min="1"
+              max="90"
+              defaultValue={settings.feed_rest_percent ?? 25}
+              onBlur={e => updateNumber('feed_rest_percent', e.target.value)}
+              className="w-16 flex-shrink-0 bg-zinc-800 text-white text-sm rounded-lg px-2 py-1 text-center outline-none"
+            />
+          </div>
         </div>
       )}
     </div>
