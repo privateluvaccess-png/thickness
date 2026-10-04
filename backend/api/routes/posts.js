@@ -111,7 +111,7 @@ router.get('/:post_id/page', async (req, res) => {
 
     const result = await getPostPageNumber(req.params.post_id, {
       isNewUser: newUserFlag, isPremiumUser: premiumFlag, isAdmin: adminFlag,
-      limit: parseInt(limit) || 5,
+      limit: parseInt(limit) || 5, userId: user_id || null,
     });
     if (!result) return res.status(404).json({ error: 'Post not found' });
 
