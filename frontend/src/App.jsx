@@ -75,7 +75,7 @@ function AppInner({
             width: 'auto',
             minWidth: 0,
             flexShrink: 1,
-            maxWidth: '42%',
+            maxWidth: '34%',
             objectFit: 'contain',
             objectPosition: 'left center'
           }}
@@ -84,20 +84,20 @@ function AppInner({
         {/* Right side icons */}
         <div className="flex items-center gap-1.5 flex-shrink-0">
 
-          {/* Battle shortcut — compact icon, same size as the others */}
+          {/* Battle shortcut — bright labelled button so nobody misses it */}
           <button
             onClick={() =>
               setActiveSection(v => (v === 'battle' ? 'feed' : 'battle'))
             }
-            className={`w-9 h-9 flex items-center justify-center rounded-full text-base border ${
+            className={`h-9 px-2.5 flex items-center justify-center gap-1 rounded-full text-xs font-extrabold whitespace-nowrap ${
               activeSection === 'battle'
-                ? 'bg-amber-500 border-amber-500'
-                : 'bg-zinc-800 border-amber-500/60'
+                ? 'bg-white text-black'
+                : 'bg-amber-500 text-black'
             }`}
+            style={{ boxShadow: '0 0 12px rgba(245,158,11,0.75)' }}
             title="Video Battle"
-            aria-label="Video Battle"
           >
-            ⚔️
+            ⚔️ Battle
           </button>
 
           {/* Language picker */}
@@ -156,6 +156,16 @@ function AppInner({
           />
         </div>
       </div>
+
+      {/* Battle banner — big, impossible to miss */}
+      {activeSection !== 'battle' && (
+        <button
+          onClick={() => setActiveSection('battle')}
+          className="flex-shrink-0 mx-4 mt-2 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-black text-sm font-extrabold flex items-center justify-center gap-2"
+        >
+          ⚔️ Video Battle is LIVE — tap to vote! 🔥
+        </button>
+      )}
 
       {/* Body */}
       <div
