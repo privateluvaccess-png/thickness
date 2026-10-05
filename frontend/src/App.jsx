@@ -4,7 +4,7 @@ import Feed from './components/Feed';
 import ChallengeView from './components/ChallengeView';
 import BattleView from './components/BattleView';
 import SubscriptionBadge from './components/SubscriptionBadge';
-import { loginUser, getSubscription, getAdSettings } from './api';
+import { loginUser, getSubscription, getAdSettings, getBattle } from './api';
 import { languageLabels, languageOrder } from './i18n/translations';
 import logo from './assets/logo.webp';
 import ProfileButton from './components/ProfileButton';
@@ -25,6 +25,22 @@ function AppInner({
   const [navigateToPostId, setNavigateToPostId] = useState(null);
   const [activeSection, setActiveSection] = useState('feed');
   const [showPromo, setShowPromo] = useState(true);
+  const [battleEndsAt, setBattleEndsAt] = useState(null);
+  const [, forceTick] = useState(0);
+
+  // One light check per app open (and when leaving the Battle tab) so the
+  // feed banner can announce the final hour.
+  useEffect(() => {
+    if (activeSection === 'battle') return;
+    getBattle(user?.telegram_id)
+      .then(res => setBattleEndsAt(res.data?.current?.ends_at || null))
+      .catch(() => {});
+  }, [activeSection, user?.telegram_id]);
+
+  useEffect(() => {
+    const id = setInterval(() => forceTick(n => n + 1), 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
 
   // If the app was opened via a shared-post link, make sure we're on
   // the Feed tab and tell Feed to scroll to that post once loaded.
@@ -163,7 +179,9 @@ function AppInner({
           onClick={() => setActiveSection('battle')}
           className="flex-shrink-0 mx-4 mt-2 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-black text-sm font-extrabold flex items-center justify-center gap-2"
         >
-          ⚔️ Video Battle is LIVE — tap to vote! 🔥
+          {battleEndsAt && new Date(battleEndsAt) - Date.now() > 0 && new Date(battleEndsAt) - Date.now() <= 3600 * 1000
+            ? '⏰ Final hour! Video Battle ends soon — vote now! 🔥'
+            : '⚔️ Video Battle is LIVE — tap to vote! 🔥'}
         </button>
       )}
 
