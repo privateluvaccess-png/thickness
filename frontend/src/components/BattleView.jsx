@@ -207,7 +207,12 @@ export default function BattleView({ telegramId, initData }) {
               disabled={busy}
               className="flex items-center justify-between bg-zinc-900 rounded-xl px-3 py-2.5 disabled:opacity-50"
             >
-              <span className="text-white text-sm font-semibold">🪙 {p.tokens} tokens</span>
+              <span className="text-left">
+                <span className="block text-white text-sm font-semibold">🪙 {p.tokens} tokens</span>
+                {data.vote_cost_tokens > 0 && (
+                  <span className="block text-gray-500 text-[11px]">≈ {Math.floor(p.tokens / data.vote_cost_tokens)} votes</span>
+                )}
+              </span>
               <span className="bg-amber-500 text-black text-sm font-bold rounded-full px-3 py-1">⭐ {p.stars}</span>
             </button>
           ))}
