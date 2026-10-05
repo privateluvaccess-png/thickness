@@ -82,6 +82,21 @@ function AppInner({
         {/* Right side icons */}
         <div className="flex items-center gap-2 flex-shrink-0">
 
+          {/* Battle shortcut — always visible in the header */}
+          <button
+            onClick={() =>
+              setActiveSection(v => (v === 'battle' ? 'feed' : 'battle'))
+            }
+            className={`h-9 px-3 flex items-center justify-center gap-1 rounded-full text-sm font-bold border ${
+              activeSection === 'battle'
+                ? 'bg-amber-500 text-black border-amber-500'
+                : 'bg-amber-500/15 text-amber-400 border-amber-500/40'
+            }`}
+            title="Video Battle"
+          >
+            ⚔️ Battle
+          </button>
+
           {/* Language picker */}
           <div className="relative">
             <button
