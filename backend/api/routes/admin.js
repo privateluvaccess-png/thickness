@@ -21,6 +21,11 @@ const { getLevelSettings, updateLevelSettings } = require('../../modules/levels'
 const { getSettings: getWeeklySettings, updateSettings: updateWeeklySettings } = require('../../modules/weeklyChallenge');
 const { getNewUserSettings, updateNewUserSettings } = require('../../modules/newUser');
 const { setPostAudience, setPostPin } = require('../../modules/posts');
+const tokens = require('../../modules/tokens');
+const {
+  getBattleSettings, updateBattleSettings, adminListBattles,
+  adminCreateBattle, adminDeleteQueued, adminEndNow,
+} = require('../../modules/battles');
 const requireAdmin = require('../../middleware/requireAdmin');
 
 // ── Admin panel: paginated post list ────────────────────────────────────────
@@ -185,6 +190,70 @@ router.post('/ads/settings', requireAdmin, async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ── Admin panel: Video Battles ──────────────────────────────────────────────
+router.get('/battles', requireAdmin, async (req, res) => {
+  try {
+    const [list, settings, packs, stats] = await Promise.all([
+      adminListBattles(), getBattleSettings(), tokens.listPacks({ activeOnly: false }), tokens.getStats(),
+    ]);
+    res.json({ success: true, ...list, settings, packs, stats });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/battles/settings', requireAdmin, async (req, res) => {
+  try {
+    const settings = await updateBattleSettings(req.body || {}, req.adminTelegramId);
+    res.json({ success: true, settings });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/battles', requireAdmin, async (req, res) => {
+  try {
+    const battle = await adminCreateBattle(req.body?.post_a, req.body?.post_b, req.adminTelegramId);
+    res.json({ success: true, battle });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+// Token packs
+router.post('/tokens/packs', requireAdmin, async (req, res) => {
+  try { res.json({ success: true, pack: await tokens.createPack(req.body?.tokens, req.body?.stars) }); }
+  catch (err) { res.status(400).json({ error: err.message }); }
+});
+router.patch('/tokens/packs/:id', requireAdmin, async (req, res) => {
+  try { res.json({ success: true, pack: await tokens.updatePack(req.params.id, req.body || {}) }); }
+  catch (err) { res.status(400).json({ error: err.message }); }
+});
+router.delete('/tokens/packs/:id', requireAdmin, async (req, res) => {
+  try { await tokens.deletePack(req.params.id); res.json({ success: true }); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Give tokens to any user + look up a user's balance
+router.post('/tokens/grant', requireAdmin, async (req, res) => {
+  try {
+    const r = await tokens.adminGrant(req.body?.user_id, req.body?.amount, req.adminTelegramId, req.body?.note);
+    res.json({ success: true, ...r });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+router.get('/tokens/user/:id', requireAdmin, async (req, res) => {
+  try { res.json({ success: true, ...(await tokens.getUserSummary(req.params.id)) }); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/battles/:id/end', requireAdmin, async (req, res) => {
+  try {
+    await adminEndNow(req.params.id);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/battles/:id', requireAdmin, async (req, res) => {
+  try {
+    await adminDeleteQueued(req.params.id);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── Admin panel: Gift Hunt settings ─────────────────────────────────────────
