@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { getBattle, castBattleVote, createTokenInvoice, castFreeBattleVote } from '../api';
 
 const BACKEND = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
-const VOTE_PACKS = [1, 5, 10];
 const POLL_MS = 45 * 1000;
 
 function mediaSrc(post) {
@@ -35,55 +34,96 @@ function formatLeft(ms) {
   return `${m}m ${s % 60}s left`;
 }
 
-function Media({ post }) {
+// Small preview card: shows the first frame, tap anywhere to watch full screen.
+function Preview({ post, label, onWatch }) {
   const src = mediaSrc(post);
   if (post?.locked) {
     return (
-      <div className="w-full h-48 flex flex-col items-center justify-center gap-1 bg-zinc-900 text-amber-400">
+      <div className="w-full h-44 flex flex-col items-center justify-center gap-1 bg-zinc-900 text-amber-400">
         <span className="text-3xl">🔒</span>
         <span className="text-xs font-semibold">Premium video</span>
       </div>
     );
   }
-  if (!src) return <div className="w-full h-48 flex items-center justify-center bg-zinc-900 text-gray-600 text-xs">Media unavailable</div>;
-  if (post.type === 'video') {
-    return <video src={src} controls muted loop playsInline preload="metadata" className="w-full max-h-[320px] bg-black object-contain" />;
+  if (!src) {
+    return <div className="w-full h-44 flex items-center justify-center bg-zinc-900 text-gray-600 text-xs">Media unavailable</div>;
   }
-  return <img src={src} alt={post.caption || 'battle'} className="w-full max-h-[320px] bg-black object-contain" />;
+  return (
+    <button onClick={onWatch} className="relative block w-full h-44 bg-black" aria-label={`Watch video ${label} full screen`}>
+      {post.type === 'video' ? (
+        <video src={`${src}#t=0.1`} muted playsInline preload="metadata" className="w-full h-full object-contain pointer-events-none" />
+      ) : (
+        <img src={src} alt="" className="w-full h-full object-contain pointer-events-none" />
+      )}
+      <span className="absolute inset-0 flex items-center justify-center bg-black/20">
+        <span className="w-14 h-14 rounded-full bg-white/90 flex items-center justify-center text-black text-2xl pl-1">▶</span>
+      </span>
+      <span className="absolute bottom-2 right-2 bg-black/70 text-white text-[11px] font-semibold rounded-full px-2.5 py-1">
+        ⛶ Full screen
+      </span>
+    </button>
+  );
 }
 
-function Contender({ side, post, votes, total, myVotes, cost, freeLeft, busy, onVote, onFreeVote }) {
+// Full-screen player. Closing it brings the user straight back to the vote buttons.
+function FullScreenViewer({ post, label, onClose }) {
+  const src = mediaSrc(post);
+  return (
+    <div className="fixed inset-0 z-[90] bg-black flex flex-col">
+      <div className="flex items-center justify-between px-4 py-3">
+        <span className="text-white text-sm font-bold">Video {label}</span>
+        <button onClick={onClose} className="bg-white text-black text-sm font-bold rounded-full px-4 py-2">
+          ✕ Close &amp; vote
+        </button>
+      </div>
+      <div className="flex-1 flex items-center justify-center min-h-0">
+        {post?.type === 'video' ? (
+          <video src={src} controls autoPlay playsInline loop className="max-w-full max-h-full" />
+        ) : (
+          <img src={src} alt="" className="max-w-full max-h-full object-contain" />
+        )}
+      </div>
+      {post?.caption && <p className="text-gray-300 text-sm text-center px-4 py-3 truncate">{post.caption}</p>}
+    </div>
+  );
+}
+
+function Contender({ side, post, votes, total, myVotes, cost, freeLeft, busy, onVote, onFreeVote, onWatch }) {
   const pct = total > 0 ? Math.round((votes / total) * 100) : 50;
+  const letter = side.toUpperCase();
   const accent = side === 'a' ? 'border-amber-500/60' : 'border-sky-500/60';
-  const btn = side === 'a' ? 'bg-amber-500 text-black' : 'bg-sky-500 text-black';
+  const main = side === 'a' ? 'bg-amber-500 text-black' : 'bg-sky-500 text-black';
+  const soft = side === 'a'
+    ? 'bg-amber-500/15 text-amber-400 border border-amber-500/40'
+    : 'bg-sky-500/15 text-sky-400 border border-sky-500/40';
   return (
     <div className={`rounded-2xl overflow-hidden bg-zinc-800/60 border ${accent}`}>
-      <Media post={post} />
+      <Preview post={post} label={letter} onWatch={onWatch} />
       <div className="p-3 flex flex-col gap-2.5">
         <div className="flex items-baseline justify-between gap-2">
-          <p className="text-white text-sm font-semibold truncate">{post?.caption || `Video ${side.toUpperCase()}`}</p>
+          <p className="text-white text-sm font-semibold truncate">{post?.caption || `Video ${letter}`}</p>
           <p className="text-gray-300 text-xs flex-shrink-0">{votes} votes · {pct}%</p>
         </div>
         {myVotes > 0 && <p className="text-xs text-green-400">You have {myVotes} vote{myVotes > 1 ? 's' : ''} here</p>}
+
         {freeLeft > 0 && (
-          <button
-            onClick={() => onFreeVote(side)}
-            disabled={busy}
-            className="w-full py-2 rounded-xl bg-green-600/20 border border-green-600/40 text-green-400 text-sm font-semibold disabled:opacity-50"
-          >
+          <button onClick={() => onFreeVote(side)} disabled={busy}
+            className="w-full py-2.5 rounded-xl bg-green-600/20 border border-green-600/40 text-green-400 text-sm font-semibold disabled:opacity-50">
             Free vote ({freeLeft} left)
           </button>
         )}
-        <div className="grid grid-cols-3 gap-2">
-          {VOTE_PACKS.map(q => (
-            <button
-              key={q}
-              onClick={() => onVote(side, q)}
-              disabled={busy}
-              className={`py-2 rounded-xl text-sm font-bold disabled:opacity-50 ${btn}`}
-            >
-              {q > 1 ? `${q} votes` : '1 vote'}
-              <span className="block text-[11px] font-semibold opacity-80">🪙 {q * cost}</span>
+
+        {/* The main, obvious vote button */}
+        <button onClick={() => onVote(side, 1)} disabled={busy}
+          className={`w-full py-3.5 rounded-xl text-base font-extrabold disabled:opacity-50 ${main}`}>
+          ❤️ Vote for Video {letter} · 🪙 {cost}
+        </button>
+
+        <div className="grid grid-cols-2 gap-2">
+          {[5, 10].map(q => (
+            <button key={q} onClick={() => onVote(side, q)} disabled={busy}
+              className={`py-2 rounded-xl text-sm font-bold disabled:opacity-50 ${soft}`}>
+              {q} votes · 🪙 {q * cost}
             </button>
           ))}
         </div>
@@ -98,7 +138,9 @@ export default function BattleView({ telegramId, initData }) {
   const [busy, setBusy]       = useState(false);
   const [msg, setMsg]         = useState('');
   const [showShop, setShowShop] = useState(false);
+  const [watching, setWatching] = useState(null); // 'a' | 'b' | null
   const timers = useRef([]);
+  const scroller = useRef(null);
 
   function load() {
     return getBattle(telegramId)
@@ -126,8 +168,9 @@ export default function BattleView({ telegramId, initData }) {
   async function handleVote(side, qty) {
     const cost = qty * data.vote_cost_tokens;
     if (data.balance < cost) {
-      setMsg(`You need ${cost} tokens for that — you have ${data.balance}.`);
+      setMsg(`You need 🪙 ${cost} to vote — you have ${data.balance}. Pick a token pack below to top up.`);
       setShowShop(true);
+      scroller.current?.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
     setBusy(true); setMsg('');
@@ -183,7 +226,14 @@ export default function BattleView({ telegramId, initData }) {
   const pctA = total > 0 ? (current.votes_a / total) * 100 : 50;
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3" style={{ minHeight: 0 }}>
+    <div ref={scroller} className="flex-1 overflow-y-auto px-4 pt-4 pb-8 flex flex-col gap-3" style={{ minHeight: 0 }}>
+      {watching && current && (
+        <FullScreenViewer
+          post={watching === 'a' ? current.post_a : current.post_b}
+          label={watching.toUpperCase()}
+          onClose={() => setWatching(null)}
+        />
+      )}
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-white text-lg font-bold">⚔️ Video Battle</h2>
         <button
@@ -220,6 +270,10 @@ export default function BattleView({ telegramId, initData }) {
         </div>
       )}
 
+      {msg && (
+        <p className="sticky top-0 z-10 text-center text-sm text-white bg-zinc-700 border border-zinc-600 rounded-xl py-2.5 px-3 shadow-lg">{msg}</p>
+      )}
+
       {current && (
         <div className="flex justify-end -mt-1">
           <span className="text-xs font-semibold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full">{formatLeft(left)}</span>
@@ -233,13 +287,17 @@ export default function BattleView({ telegramId, initData }) {
         </div>
       ) : (
         <>
-          <p className="text-gray-400 text-xs">
-            Back your favourite. Each vote costs 🪙 {data.vote_cost_tokens}. Voters who back the winner earn {data.winner_xp} XP when the round ends.
-          </p>
+          <div className="bg-zinc-800/60 rounded-2xl px-3.5 py-3">
+            <p className="text-white text-sm font-semibold">Vote for the video you love! 🔥</p>
+            <p className="text-gray-400 text-xs mt-1">
+              Tap a video to watch it full screen, then vote for your favourite. Each vote costs 🪙 {data.vote_cost_tokens}.
+              Back the winner and earn {data.winner_xp} XP when the round ends.
+            </p>
+          </div>
 
           <Contender side="a" post={current.post_a} votes={current.votes_a} total={total}
             myVotes={current.my_votes_a} cost={data.vote_cost_tokens} freeLeft={current.free_votes_left}
-            busy={busy} onVote={handleVote} onFreeVote={handleFreeVote} />
+            busy={busy} onVote={handleVote} onFreeVote={handleFreeVote} onWatch={() => setWatching('a')} />
 
           <div className="flex items-center gap-2">
             <span className="text-amber-400 text-xs font-bold">A</span>
@@ -251,9 +309,8 @@ export default function BattleView({ telegramId, initData }) {
 
           <Contender side="b" post={current.post_b} votes={current.votes_b} total={total}
             myVotes={current.my_votes_b} cost={data.vote_cost_tokens} freeLeft={current.free_votes_left}
-            busy={busy} onVote={handleVote} onFreeVote={handleFreeVote} />
+            busy={busy} onVote={handleVote} onFreeVote={handleFreeVote} onWatch={() => setWatching('b')} />
 
-          {msg && <p className="text-center text-sm text-gray-200 bg-zinc-800 rounded-xl py-2.5 px-3">{msg}</p>}
         </>
       )}
 
