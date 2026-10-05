@@ -157,3 +157,38 @@ export const updateAdminWeeklyChallengeSettings = (initData, settings) =>
   API.post('/api/admin/weekly-challenge/settings', settings, { headers: { 'x-telegram-init-data': initData } });
 export const getAdminWeeklyChallengeResults = (initData, weekKey) =>
   API.get(`/api/admin/weekly-challenge/results${weekKey ? `?week_key=${weekKey}` : ''}`, { headers: { 'x-telegram-init-data': initData } });
+
+// Video Battles — public (user) side. Anything that costs Stars or counts as a
+// vote sends the signed Telegram initData so the server knows who's really voting.
+export const getBattle = (userId) =>
+  API.get(`/api/battles${userId ? `?user_id=${userId}` : ''}`);
+export const castBattleVote = (initData, battleId, side, qty) =>
+  API.post('/api/battles/vote', { battle_id: battleId, side, qty }, { headers: { 'x-telegram-init-data': initData } });
+export const createTokenInvoice = (initData, packId) =>
+  API.post('/api/battles/tokens/invoice', { pack_id: packId }, { headers: { 'x-telegram-init-data': initData } });
+export const castFreeBattleVote = (initData, battleId, side) =>
+  API.post('/api/battles/free-vote', { battle_id: battleId, side }, { headers: { 'x-telegram-init-data': initData } });
+
+// Video Battles — admin
+export const getAdminBattles = (initData) =>
+  API.get('/api/admin/battles', { headers: { 'x-telegram-init-data': initData } });
+export const updateAdminBattleSettings = (initData, settings) =>
+  API.post('/api/admin/battles/settings', settings, { headers: { 'x-telegram-init-data': initData } });
+export const createAdminBattle = (initData, postA, postB) =>
+  API.post('/api/admin/battles', { post_a: postA, post_b: postB }, { headers: { 'x-telegram-init-data': initData } });
+export const endAdminBattle = (initData, id) =>
+  API.post(`/api/admin/battles/${id}/end`, {}, { headers: { 'x-telegram-init-data': initData } });
+export const deleteAdminBattle = (initData, id) =>
+  API.delete(`/api/admin/battles/${id}`, { headers: { 'x-telegram-init-data': initData } });
+
+// Battle tokens — admin (packs, grants, user lookup)
+export const createAdminTokenPack = (initData, tokens, stars) =>
+  API.post('/api/admin/tokens/packs', { tokens, stars }, { headers: { 'x-telegram-init-data': initData } });
+export const updateAdminTokenPack = (initData, id, fields) =>
+  API.patch(`/api/admin/tokens/packs/${id}`, fields, { headers: { 'x-telegram-init-data': initData } });
+export const deleteAdminTokenPack = (initData, id) =>
+  API.delete(`/api/admin/tokens/packs/${id}`, { headers: { 'x-telegram-init-data': initData } });
+export const grantAdminTokens = (initData, userId, amount, note) =>
+  API.post('/api/admin/tokens/grant', { user_id: userId, amount, note }, { headers: { 'x-telegram-init-data': initData } });
+export const getAdminTokenUser = (initData, userId) =>
+  API.get(`/api/admin/tokens/user/${userId}`, { headers: { 'x-telegram-init-data': initData } });
