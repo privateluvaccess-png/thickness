@@ -64,7 +64,12 @@ async function settleBattle(battle) {
   const winner = battle.votes_a === battle.votes_b ? null : (battle.votes_a > battle.votes_b ? 'a' : 'b');
   const { data: claimed, error } = await supabase
     .from('battles')
-    .update({ status: 'settled', winner_side: winner, settled_at: new Date().toISOString() })
+    .update({
+      status: 'settled',
+      winner_side: winner,
+      // Ending early? Record the real end time so "last battle" ordering stays correct.
+      ends_at: new Date(Math.min(Date.now(), new Date(battle.ends_at).getTime())).toISOString(),
+    })
     .eq('id', battle.id).eq('status', 'active')
     .select().maybeSingle();
   if (error) throw error;
@@ -160,7 +165,7 @@ async function getBattleView(userId, { isAdmin = false } = {}) {
     listPacks({ activeOnly: true }),
     userId ? getBalance(userId) : 0,
     supabase.from('battles').select('*').eq('status', 'active').maybeSingle(),
-    supabase.from('battles').select('*').eq('status', 'settled').order('settled_at', { ascending: false }).limit(1).maybeSingle(),
+    supabase.from('battles').select('*').eq('status', 'settled').order('ends_at', { ascending: false }).limit(1).maybeSingle(),
     userId ? checkSubscription(userId).catch(() => ({ isPremium: false })) : { isPremium: false },
   ]);
 
@@ -175,10 +180,10 @@ async function getBattleView(userId, { isAdmin = false } = {}) {
     let myA = 0, myB = 0, freeUsed = 0;
     if (userId) {
       const { data: mine } = await supabase
-        .from('battle_votes').select('side, qty, free').eq('battle_id', active.id).eq('user_id', String(userId));
+        .from('battle_votes').select('side, weight, kind').eq('battle_id', active.id).eq('user_id', String(userId));
       for (const v of mine || []) {
-        if (v.side === 'a') myA += v.qty; else myB += v.qty;
-        if (v.free) freeUsed += v.qty;
+        if (v.side === 'a') myA += v.weight; else myB += v.weight;
+        if (v.kind === 'free') freeUsed += v.weight;
       }
     }
     current = {
@@ -227,24 +232,24 @@ async function castTokenVote({ battleId, userId, side, qty }) {
   const settings = await getBattleSettings();
   if (!settings.enabled) return { ok: false, reason: 'ended', balance: 0 };
 
-  const { data, error } = await supabase.rpc('battle_cast_vote', {
-    p_battle: battleId, p_user: String(userId), p_side: side, p_qty: n,
-    p_cost: settings.vote_cost_tokens, p_free: false, p_free_limit: 0,
+  const cost = n * settings.vote_cost_tokens;
+  const { data, error } = await supabase.rpc('battle_vote_tokens', {
+    p_battle: battleId, p_user: String(userId), p_side: side, p_weight: n, p_cost: cost,
   });
   if (error) throw error;
   const row = data?.[0] || {};
-  return { ok: !!row.ok, reason: row.reason || null, balance: Number(row.new_balance) || 0, cost: row.spent || 0 };
+  return { ok: !!row.ok, reason: row.reason || null, balance: Number(row.new_balance) || 0, cost };
 }
 
 async function castFreeVote({ battleId, userId, side }) {
   const settings = await getBattleSettings();
   const { data, error } = await supabase.rpc('battle_cast_vote', {
-    p_battle: battleId, p_user: String(userId), p_side: side, p_qty: 1,
-    p_cost: 0, p_free: true, p_free_limit: settings.free_votes_per_battle,
+    p_battle: battleId, p_user: String(userId), p_side: side, p_weight: 1,
+    p_stars: 0, p_charge: null, p_kind: 'free', p_free_limit: settings.free_votes_per_battle,
   });
   if (error) throw error;
   const row = data?.[0] || {};
-  return { counted: !!row.ok, reason: row.reason || null };
+  return { counted: !!row.counted, reason: row.reason || null };
 }
 
 // ── Admin ───────────────────────────────────────────────────────────────────
