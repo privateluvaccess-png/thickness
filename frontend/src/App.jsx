@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
 import Feed from './components/Feed';
 import ChallengeView from './components/ChallengeView';
+import BattleView from './components/BattleView';
 import SubscriptionBadge from './components/SubscriptionBadge';
 import { loginUser, getSubscription, getAdSettings } from './api';
 import { languageLabels, languageOrder } from './i18n/translations';
@@ -169,6 +170,13 @@ function AppInner({
             telegramId={user?.telegram_id}
           />
         )}
+
+        {activeSection === 'battle' && (
+          <BattleView
+            telegramId={user?.telegram_id}
+            initData={initData}
+          />
+        )}
       </div>
 
       {/* Bottom tab bar */}
@@ -198,6 +206,17 @@ function AppInner({
           }`}
         >
           🏆 Challenge
+        </button>
+
+        <button
+          onClick={() => setActiveSection('battle')}
+          className={`flex-1 flex items-center justify-center gap-2 text-sm font-medium ${
+            activeSection === 'battle'
+              ? 'text-amber-400'
+              : 'text-gray-500'
+          }`}
+        >
+          ⚔️ Battle
         </button>
       </div>
 
