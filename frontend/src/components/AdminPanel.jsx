@@ -12,6 +12,8 @@ import {
   getAdminNewUserSettings, updateAdminNewUserSettings,
   setAdminPostAudience, setAdminPostPin,
   getAdminWeeklyChallengeSettings, updateAdminWeeklyChallengeSettings, getAdminWeeklyChallengeResults,
+  getAdminBattles, updateAdminBattleSettings, createAdminBattle, endAdminBattle, deleteAdminBattle,
+  createAdminTokenPack, updateAdminTokenPack, deleteAdminTokenPack, grantAdminTokens, getAdminTokenUser,
 } from '../api';
 
 // Foundation panel for the (previously nonexistent) Channel Admin UI.
@@ -121,6 +123,9 @@ export default function AdminPanel({ initData, onClose }) {
 
               {/* Ad format toggles */}
               <AdsSection initData={initData} />
+
+              {/* Video Battles */}
+              <BattleSection initData={initData} />
 
               {/* Gift Hunt settings */}
               <GiftHuntSection initData={initData} />
@@ -1365,6 +1370,282 @@ function StatBox({ label, value }) {
     <div className="bg-zinc-800 rounded-xl px-4 py-3">
       <p className="text-white font-bold text-lg">{value}</p>
       <p className="text-gray-500 text-xs">{label}</p>
+    </div>
+  );
+}
+
+// Video Battles — price per vote, round length, and which two videos fight.
+// If nothing is queued when a round ends, the server auto-picks two free videos.
+function BattleSection({ initData }) {
+  const [data, setData]       = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState('');
+  const [busy, setBusy]       = useState(false);
+  const [picking, setPicking] = useState(false);
+  const [videos, setVideos]   = useState([]);
+  const [cursor, setCursor]   = useState(null);
+  const [pickA, setPickA]     = useState(null);
+  const [pickB, setPickB]     = useState(null);
+
+  async function load() {
+    try {
+      const res = await getAdminBattles(initData);
+      setData(res.data);
+    } catch (err) {
+      setError(err?.response?.data?.error || err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+
+  async function run(fn) {
+    setBusy(true); setError('');
+    try { await fn(); await load(); }
+    catch (err) { setError(err?.response?.data?.error || err.message); }
+    finally { setBusy(false); }
+  }
+
+  const settings = data?.settings;
+  const save = (key, value, allowZero) => {
+    const n = Number(value);
+    if (!Number.isInteger(n) || n < (allowZero ? 0 : 1)) return;
+    run(() => updateAdminBattleSettings(initData, { [key]: n }));
+  };
+
+  async function loadVideos(more) {
+    try {
+      const res = await getAdminPosts(initData, more ? cursor : undefined);
+      const vids = (res.data.posts || []).filter(p => p.type === 'video');
+      setVideos(prev => (more ? [...prev, ...vids] : vids));
+      setCursor(res.data.nextCursor);
+    } catch (err) {
+      setError(err?.response?.data?.error || err.message);
+    }
+  }
+
+  function openPicker() {
+    setPicking(true);
+    if (videos.length === 0) loadVideos(false);
+  }
+
+  function pick(post) {
+    if (pickA?.id === post.id) return setPickA(null);
+    if (pickB?.id === post.id) return setPickB(null);
+    if (!pickA) setPickA(post);
+    else if (!pickB) setPickB(post);
+  }
+
+  async function startBattle() {
+    await run(() => createAdminBattle(initData, pickA.id, pickB.id));
+    setPickA(null); setPickB(null); setPicking(false);
+  }
+
+  const statusColor = { active: 'text-green-400', queued: 'text-amber-400', settled: 'text-gray-500' };
+
+  return (
+    <div className="flex flex-col gap-2 bg-zinc-800/50 rounded-xl p-3">
+      <span className="text-gray-400 text-xs font-semibold uppercase">⚔️ Video Battles</span>
+      {error && <p className="text-red-400 text-xs">{error}</p>}
+      {loading ? <p className="text-gray-500 text-xs">Loading...</p> : (
+        <>
+          <div className="flex items-center justify-between bg-zinc-900 rounded-lg px-3 py-2.5">
+            <span className="text-white text-sm">Battles on</span>
+            <button
+              onClick={() => run(() => updateAdminBattleSettings(initData, { enabled: !settings.enabled }))}
+              disabled={busy}
+              className={`flex-shrink-0 w-12 h-7 rounded-full transition-colors relative disabled:opacity-50 ${settings.enabled ? 'bg-green-600' : 'bg-zinc-700'}`}
+            >
+              <span className={`absolute top-0.5 w-6 h-6 rounded-full bg-white transition-transform ${settings.enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
+
+          {[
+            { key: 'vote_cost_tokens', label: 'Tokens per vote', hint: 'What 1 vote costs a user', min: 1 },
+            { key: 'round_hours', label: 'Round length (hours)', hint: '48 = 2 days', min: 1 },
+            { key: 'free_votes_per_battle', label: 'Free votes per user', hint: '0 = every vote is paid', min: 0 },
+            { key: 'winner_xp', label: 'XP for backing the winner', hint: 'Paid out when the round ends', min: 1 },
+          ].map(f => (
+            <div key={f.key} className="flex items-center justify-between bg-zinc-900 rounded-lg px-3 py-2.5">
+              <div className="min-w-0">
+                <p className="text-white text-sm">{f.label}</p>
+                <p className="text-gray-500 text-[11px]">{f.hint}</p>
+              </div>
+              <input
+                type="number"
+                min={f.min}
+                defaultValue={settings[f.key]}
+                onBlur={e => save(f.key, e.target.value, f.min === 0)}
+                className="w-16 flex-shrink-0 bg-zinc-800 text-white text-sm rounded-lg px-2 py-1 text-center outline-none"
+              />
+            </div>
+          ))}
+
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              ['⭐ Stars earned', data.stats.stars_earned],
+              ['🪙 Tokens sold', data.stats.tokens_sold],
+              ['🪙 Tokens spent', data.stats.tokens_spent],
+              ['🪙 Unspent by users', data.stats.tokens_outstanding],
+            ].map(([label, val]) => (
+              <div key={label} className="bg-zinc-900 rounded-lg px-3 py-2">
+                <p className="text-white text-sm font-bold">{val}</p>
+                <p className="text-gray-500 text-[11px]">{label}</p>
+              </div>
+            ))}
+          </div>
+
+          <TokenPacksEditor initData={initData} packs={data.packs} busy={busy} run={run} />
+          <TokenGrantForm initData={initData} onDone={load} />
+
+          {!picking ? (
+            <button onClick={openPicker} className="w-full py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-sm font-semibold">
+              + Pick two videos for a battle
+            </button>
+          ) : (
+            <div className="flex flex-col gap-2 bg-zinc-900 rounded-lg p-2.5">
+              <p className="text-gray-400 text-xs">Tap two videos. 1st = A, 2nd = B. It starts right away if no battle is running, otherwise it waits in the queue.</p>
+              <div className="max-h-64 overflow-y-auto flex flex-col gap-1.5">
+                {videos.map(v => {
+                  const slot = pickA?.id === v.id ? 'A' : pickB?.id === v.id ? 'B' : null;
+                  return (
+                    <button key={v.id} onClick={() => pick(v)}
+                      className={`flex items-center gap-2 text-left rounded-lg px-2.5 py-2 ${slot ? 'bg-amber-500/20 border border-amber-500/50' : 'bg-zinc-800'}`}>
+                      <span className="w-6 text-center text-amber-400 text-sm font-bold">{slot || ''}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm text-gray-200 truncate">{v.caption || '(no caption)'}</span>
+                        <span className={`text-[11px] ${v.tier === 'premium' ? 'text-amber-400' : 'text-green-400'}`}>{v.tier === 'premium' ? '⭐ Premium' : 'Free'}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+                {cursor && <button onClick={() => loadVideos(true)} className="py-2 text-xs text-gray-400">Load more</button>}
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => { setPicking(false); setPickA(null); setPickB(null); }} className="flex-1 py-2 rounded-lg bg-zinc-800 text-gray-300 text-sm">Cancel</button>
+                <button onClick={startBattle} disabled={!pickA || !pickB || busy} className="flex-1 py-2 rounded-lg bg-amber-500 text-black text-sm font-bold disabled:opacity-40">Start battle</button>
+              </div>
+            </div>
+          )}
+
+          <span className="text-gray-400 text-xs font-semibold uppercase mt-1">Recent battles</span>
+          {data.battles.length === 0 ? <p className="text-gray-500 text-xs">None yet.</p> : data.battles.map(b => (
+            <div key={b.id} className="bg-zinc-900 rounded-lg px-3 py-2 flex flex-col gap-1">
+              <div className="flex items-center justify-between">
+                <span className={`text-xs font-semibold ${statusColor[b.status] || ''}`}>
+                  {b.status === 'active' ? 'LIVE' : b.status}{b.auto_picked ? ' · auto' : ''}
+                </span>
+                <span className="text-xs text-gray-400">🪙 {b.tokens_total || 0}</span>
+              </div>
+              <p className="text-xs text-gray-300 truncate">A: {b.label_a} <span className="text-gray-500">({b.votes_a})</span></p>
+              <p className="text-xs text-gray-300 truncate">B: {b.label_b} <span className="text-gray-500">({b.votes_b})</span></p>
+              {b.status === 'active' && (
+                <button onClick={() => confirm('End this battle now and pay out winners?') && run(() => endAdminBattle(initData, b.id))}
+                  disabled={busy} className="self-start text-xs text-red-400 mt-0.5">End now</button>
+              )}
+              {b.status === 'queued' && (
+                <button onClick={() => run(() => deleteAdminBattle(initData, b.id))}
+                  disabled={busy} className="self-start text-xs text-red-400 mt-0.5">Remove from queue</button>
+              )}
+            </div>
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+// Token packs users can buy: edit tokens/Stars, hide, delete, or add new ones.
+function TokenPacksEditor({ initData, packs, busy, run }) {
+  const [newTokens, setNewTokens] = useState('');
+  const [newStars, setNewStars]   = useState('');
+  const inputCls = 'w-16 bg-zinc-800 text-white text-sm rounded-lg px-2 py-1 text-center outline-none';
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-gray-400 text-xs font-semibold uppercase mt-1">Token packs</span>
+      {packs.length === 0 && <p className="text-gray-500 text-xs">No packs yet — users can't buy tokens.</p>}
+      {packs.map(p => (
+        <div key={p.id} className={`flex items-center gap-2 bg-zinc-900 rounded-lg px-2.5 py-2 ${p.active ? '' : 'opacity-50'}`}>
+          <span className="text-sm">🪙</span>
+          <input type="number" min="1" defaultValue={p.tokens} className={inputCls}
+            onBlur={e => Number(e.target.value) !== p.tokens && Number(e.target.value) > 0 && run(() => updateAdminTokenPack(initData, p.id, { tokens: Number(e.target.value) }))} />
+          <span className="text-gray-500 text-xs">for ⭐</span>
+          <input type="number" min="1" defaultValue={p.stars} className={inputCls}
+            onBlur={e => Number(e.target.value) !== p.stars && Number(e.target.value) > 0 && run(() => updateAdminTokenPack(initData, p.id, { stars: Number(e.target.value) }))} />
+          <button disabled={busy} onClick={() => run(() => updateAdminTokenPack(initData, p.id, { active: !p.active }))}
+            className="ml-auto text-xs text-gray-300">{p.active ? 'Hide' : 'Show'}</button>
+          <button disabled={busy} onClick={() => confirm('Delete this pack?') && run(() => deleteAdminTokenPack(initData, p.id))}
+            className="text-xs text-red-400">Delete</button>
+        </div>
+      ))}
+      <div className="flex items-center gap-2 bg-zinc-900 rounded-lg px-2.5 py-2">
+        <span className="text-sm">➕</span>
+        <input type="number" min="1" placeholder="tokens" value={newTokens} onChange={e => setNewTokens(e.target.value)} className={inputCls} />
+        <span className="text-gray-500 text-xs">for ⭐</span>
+        <input type="number" min="1" placeholder="Stars" value={newStars} onChange={e => setNewStars(e.target.value)} className={inputCls} />
+        <button
+          disabled={busy || !(Number(newTokens) > 0 && Number(newStars) > 0)}
+          onClick={async () => { await run(() => createAdminTokenPack(initData, Number(newTokens), Number(newStars))); setNewTokens(''); setNewStars(''); }}
+          className="ml-auto bg-amber-500 text-black text-xs font-bold rounded-lg px-3 py-1.5 disabled:opacity-40"
+        >Add</button>
+      </div>
+    </div>
+  );
+}
+
+// Send tokens to any user by Telegram ID (they get a Telegram message too).
+function TokenGrantForm({ initData, onDone }) {
+  const [userId, setUserId] = useState('');
+  const [amount, setAmount] = useState('');
+  const [note, setNote]     = useState('');
+  const [info, setInfo]     = useState(null);
+  const [status, setStatus] = useState('');
+  const [busy, setBusy]     = useState(false);
+  const inputCls = 'bg-zinc-800 text-white text-sm rounded-lg px-2.5 py-2 outline-none w-full';
+
+  async function lookup() {
+    if (!userId.trim()) return;
+    setStatus(''); setInfo(null);
+    try {
+      const res = await getAdminTokenUser(initData, userId.trim());
+      setInfo(res.data);
+      if (!res.data.found) setStatus('No user with that Telegram ID.');
+    } catch (err) { setStatus(err?.response?.data?.error || err.message); }
+  }
+
+  async function send() {
+    setBusy(true); setStatus('');
+    try {
+      const res = await grantAdminTokens(initData, userId.trim(), Number(amount), note.trim() || undefined);
+      setStatus(`✅ Sent ${amount} tokens to ${res.data.name}. New balance: ${res.data.balance}`);
+      setAmount(''); setNote('');
+      lookup(); onDone?.();
+    } catch (err) { setStatus(err?.response?.data?.error || err.message); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div className="flex flex-col gap-2 bg-zinc-900 rounded-lg p-2.5">
+      <span className="text-gray-400 text-xs font-semibold uppercase">🎁 Send tokens to a user</span>
+      <div className="flex gap-2">
+        <input inputMode="numeric" placeholder="User's Telegram ID" value={userId}
+          onChange={e => { setUserId(e.target.value); setInfo(null); }} className={inputCls} />
+        <button onClick={lookup} className="flex-shrink-0 bg-zinc-800 text-gray-200 text-xs font-semibold rounded-lg px-3">Check</button>
+      </div>
+      {info?.found && (
+        <p className="text-xs text-gray-300">{info.name || 'User'} · balance <span className="text-amber-400 font-semibold">🪙 {info.balance}</span></p>
+      )}
+      <div className="flex gap-2">
+        <input type="number" min="1" placeholder="Tokens" value={amount} onChange={e => setAmount(e.target.value)} className={inputCls} />
+        <input placeholder="Note (optional)" value={note} onChange={e => setNote(e.target.value)} className={inputCls} />
+      </div>
+      <button
+        onClick={send}
+        disabled={busy || !userId.trim() || !(Number(amount) > 0)}
+        className="w-full py-2.5 rounded-xl bg-amber-500 text-black text-sm font-bold disabled:opacity-40"
+      >{busy ? 'Sending…' : 'Send tokens'}</button>
+      {status && <p className="text-xs text-gray-300">{status}</p>}
     </div>
   );
 }
