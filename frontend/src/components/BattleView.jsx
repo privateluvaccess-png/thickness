@@ -88,7 +88,7 @@ function FullScreenViewer({ post, label, onClose }) {
   );
 }
 
-function Contender({ side, post, votes, total, myVotes, cost, freeLeft, busy, onVote, onFreeVote, onWatch }) {
+function Contender({ side, post, votes, total, myVotes, cost, freeLeft, busy, onVote, onFreeVote, onWatch, underdogXp }) {
   const pct = total > 0 ? Math.round((votes / total) * 100) : 50;
   const letter = side.toUpperCase();
   const accent = side === 'a' ? 'border-amber-500/60' : 'border-sky-500/60';
@@ -104,6 +104,11 @@ function Contender({ side, post, votes, total, myVotes, cost, freeLeft, busy, on
           <p className="text-white text-sm font-semibold truncate">{post?.caption || `Video ${letter}`}</p>
           <p className="text-gray-300 text-xs flex-shrink-0">{votes} votes · {pct}%</p>
         </div>
+        {underdogXp > 0 && (
+          <p className="text-xs font-semibold text-purple-300 bg-purple-500/15 border border-purple-500/30 rounded-lg px-2.5 py-1.5">
+            🐶 Underdog! Back this video and if it wins, you earn +{underdogXp} bonus XP
+          </p>
+        )}
         {myVotes > 0 && <p className="text-xs text-green-400">You have {myVotes} vote{myVotes > 1 ? 's' : ''} here</p>}
 
         {freeLeft > 0 && (
@@ -277,6 +282,12 @@ export default function BattleView({ telegramId, initData }) {
         <p className="sticky top-0 z-10 text-center text-sm text-white bg-zinc-700 border border-zinc-600 rounded-xl py-2.5 px-3 shadow-lg">{msg}</p>
       )}
 
+      {current && left > 0 && left <= 60 * 60 * 1000 && (
+        <p className="text-center text-sm font-extrabold text-black bg-gradient-to-r from-red-500 to-orange-500 rounded-xl py-2.5 px-3 animate-pulse">
+          ⏰ {left <= 10 * 60 * 1000 ? 'Last minutes' : 'Final hour'} — every vote counts! Ends in {formatLeft(left).replace(' left', '')}
+        </p>
+      )}
+
       {current && (
         <div className="flex justify-end -mt-1">
           <span className="text-xs font-semibold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full">{formatLeft(left)}</span>
@@ -295,24 +306,39 @@ export default function BattleView({ telegramId, initData }) {
             <p className="text-gray-400 text-xs mt-1">
               Tap a video to watch it full screen, then vote for your favourite. Each vote costs 🪙 {data.vote_cost_tokens}.
               Back the winner and earn {data.winner_xp} XP when the round ends.
+              {data.underdog_bonus_xp > 0 && ` Back the video that's behind and it comes back to win? +${data.underdog_bonus_xp} bonus XP!`}
             </p>
           </div>
 
           <Contender side="a" post={current.post_a} votes={current.votes_a} total={total}
             myVotes={current.my_votes_a} cost={data.vote_cost_tokens} freeLeft={current.free_votes_left}
-            busy={busy} onVote={handleVote} onFreeVote={handleFreeVote} onWatch={() => setWatching('a')} />
+            busy={busy} onVote={handleVote} onFreeVote={handleFreeVote} onWatch={() => setWatching('a')}
+            underdogXp={current.votes_a < current.votes_b ? data.underdog_bonus_xp : 0} />
 
-          <div className="flex items-center gap-2">
-            <span className="text-amber-400 text-xs font-bold">A</span>
-            <div className="flex-1 h-2 rounded-full bg-sky-500/70 overflow-hidden">
-              <div className="h-full bg-amber-500 transition-all duration-500" style={{ width: `${pctA}%` }} />
+          {/* Live score bar — real vote counts */}
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-2">
+              <span className="text-amber-400 text-sm font-extrabold min-w-[2.5rem] text-left">A {current.votes_a}</span>
+              <div className="flex-1 h-3 rounded-full bg-sky-500/70 overflow-hidden">
+                <div className="h-full bg-amber-500 transition-all duration-500" style={{ width: `${pctA}%` }} />
+              </div>
+              <span className="text-sky-400 text-sm font-extrabold min-w-[2.5rem] text-right">{current.votes_b} B</span>
             </div>
-            <span className="text-sky-400 text-xs font-bold">B</span>
+            {total > 0 && (
+              <p className="text-center text-xs font-semibold text-gray-300">
+                {current.votes_a === current.votes_b
+                  ? '🤝 Dead heat — your vote decides it!'
+                  : Math.abs(current.votes_a - current.votes_b) <= Math.max(3, total * 0.1)
+                    ? `🔥 Neck and neck — only ${Math.abs(current.votes_a - current.votes_b)} vote${Math.abs(current.votes_a - current.votes_b) > 1 ? 's' : ''} apart!`
+                    : `Video ${current.votes_a > current.votes_b ? 'A' : 'B'} leads by ${Math.abs(current.votes_a - current.votes_b)} votes`}
+              </p>
+            )}
           </div>
 
           <Contender side="b" post={current.post_b} votes={current.votes_b} total={total}
             myVotes={current.my_votes_b} cost={data.vote_cost_tokens} freeLeft={current.free_votes_left}
-            busy={busy} onVote={handleVote} onFreeVote={handleFreeVote} onWatch={() => setWatching('b')} />
+            busy={busy} onVote={handleVote} onFreeVote={handleFreeVote} onWatch={() => setWatching('b')}
+            underdogXp={current.votes_b < current.votes_a ? data.underdog_bonus_xp : 0} />
 
         </>
       )}
