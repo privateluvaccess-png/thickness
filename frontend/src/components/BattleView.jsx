@@ -39,17 +39,17 @@ function Preview({ post, label, onWatch }) {
   const src = mediaSrc(post);
   if (post?.locked) {
     return (
-      <div className="w-full h-44 flex flex-col items-center justify-center gap-1 bg-zinc-900 text-amber-400">
+      <div className="w-full h-36 flex flex-col items-center justify-center gap-1 bg-zinc-900 text-amber-400">
         <span className="text-3xl">🔒</span>
         <span className="text-xs font-semibold">Premium video</span>
       </div>
     );
   }
   if (!src) {
-    return <div className="w-full h-44 flex items-center justify-center bg-zinc-900 text-gray-600 text-xs">Media unavailable</div>;
+    return <div className="w-full h-36 flex items-center justify-center bg-zinc-900 text-gray-600 text-xs">Media unavailable</div>;
   }
   return (
-    <button onClick={onWatch} className="relative block w-full h-44 bg-black" aria-label={`Watch video ${label} full screen`}>
+    <button onClick={onWatch} className="relative block w-full h-36 bg-black" aria-label={`Watch video ${label} full screen`}>
       {post.type === 'video' ? (
         <video src={`${src}#t=0.1`} muted playsInline preload="metadata" className="w-full h-full object-contain pointer-events-none" />
       ) : (
@@ -225,8 +225,11 @@ export default function BattleView({ telegramId, initData }) {
   const total = current ? current.votes_a + current.votes_b : 0;
   const pctA = total > 0 ? (current.votes_a / total) * 100 : 50;
 
+  const canVote = !!(data?.enabled && current);
+
   return (
-    <div ref={scroller} className="flex-1 overflow-y-auto px-4 pt-4 pb-8 flex flex-col gap-3" style={{ minHeight: 0 }}>
+    <div className="flex-1 flex flex-col" style={{ minHeight: 0 }}>
+    <div ref={scroller} className="flex-1 overflow-y-auto px-4 pt-4 pb-6 flex flex-col gap-3" style={{ minHeight: 0 }}>
       {watching && current && (
         <FullScreenViewer
           post={watching === 'a' ? current.post_a : current.post_b}
@@ -325,6 +328,26 @@ export default function BattleView({ telegramId, initData }) {
           {prev.winner_post?.caption && <p className="text-gray-500 text-xs mt-0.5 truncate">{prev.winner_post.caption}</p>}
         </div>
       )}
+    </div>
+
+    {/* Always-visible vote bar */}
+    {canVote && (
+      <div className="flex-shrink-0 border-t border-zinc-700 bg-zinc-900 px-4 pt-2.5 pb-3">
+        <p className="text-center text-gray-400 text-[11px] mb-2">
+          Tap to vote · 🪙 {data.vote_cost_tokens} per vote · You have 🪙 {data.balance}
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <button onClick={() => handleVote('a', 1)} disabled={busy}
+            className="py-3.5 rounded-xl bg-amber-500 text-black text-base font-extrabold disabled:opacity-50">
+            ❤️ VOTE A
+          </button>
+          <button onClick={() => handleVote('b', 1)} disabled={busy}
+            className="py-3.5 rounded-xl bg-sky-500 text-black text-base font-extrabold disabled:opacity-50">
+            ❤️ VOTE B
+          </button>
+        </div>
+      </div>
+    )}
     </div>
   );
 }
