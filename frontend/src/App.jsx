@@ -71,30 +71,33 @@ function AppInner({
           src={logo}
           alt="Thickness"
           style={{
-            height: 36,
+            height: 30,
             width: 'auto',
-            maxWidth: '55%',
+            minWidth: 0,
+            flexShrink: 1,
+            maxWidth: '42%',
             objectFit: 'contain',
             objectPosition: 'left center'
           }}
         />
 
         {/* Right side icons */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-1.5 flex-shrink-0">
 
-          {/* Battle shortcut — always visible in the header */}
+          {/* Battle shortcut — compact icon, same size as the others */}
           <button
             onClick={() =>
               setActiveSection(v => (v === 'battle' ? 'feed' : 'battle'))
             }
-            className={`h-9 px-3 flex items-center justify-center gap-1 rounded-full text-sm font-bold border ${
+            className={`w-9 h-9 flex items-center justify-center rounded-full text-base border ${
               activeSection === 'battle'
-                ? 'bg-amber-500 text-black border-amber-500'
-                : 'bg-amber-500/15 text-amber-400 border-amber-500/40'
+                ? 'bg-amber-500 border-amber-500'
+                : 'bg-zinc-800 border-amber-500/60'
             }`}
             title="Video Battle"
+            aria-label="Video Battle"
           >
-            ⚔️ Battle
+            ⚔️
           </button>
 
           {/* Language picker */}
