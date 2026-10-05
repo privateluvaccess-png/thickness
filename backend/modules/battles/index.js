@@ -17,7 +17,7 @@ async function getBattleSettings() {
 async function updateBattleSettings(fields, adminTelegramId) {
   const patch = {};
   if (typeof fields.enabled === 'boolean') patch.enabled = fields.enabled;
-  const ints = { vote_cost_tokens: 1, round_hours: 1, free_votes_per_battle: 0, winner_xp: 1 };
+  const ints = { vote_cost_tokens: 1, round_hours: 1, winner_xp: 1, underdog_bonus_xp: 0 };
   for (const [key, min] of Object.entries(ints)) {
     if (fields[key] === undefined) continue;
     const n = Number(fields[key]);
@@ -78,13 +78,26 @@ async function settleBattle(battle) {
   if (!winner) return;
   const settings = await getBattleSettings();
   const { data: votes } = await supabase
-    .from('battle_votes').select('user_id').eq('battle_id', battle.id).eq('side', winner);
+    .from('battle_votes').select('user_id, underdog').eq('battle_id', battle.id).eq('side', winner);
+
   const voters = [...new Set((votes || []).map(v => v.user_id))];
+  const underdogVoters = [...new Set((votes || []).filter(v => v.underdog).map(v => v.user_id))];
+
   for (const userId of voters) {
     try {
       await awardXp(userId, settings.winner_xp, 'battle_winner', `battle:${battle.id}`);
     } catch (err) {
       console.error('[battles] XP payout failed for', userId, err.message);
+    }
+  }
+  // Extra reward for people who backed the winner while it was still behind.
+  if (settings.underdog_bonus_xp > 0) {
+    for (const userId of underdogVoters) {
+      try {
+        await awardXp(userId, settings.underdog_bonus_xp, 'battle_underdog', `battle:${battle.id}`);
+      } catch (err) {
+        console.error('[battles] underdog XP failed for', userId, err.message);
+      }
     }
   }
 }
@@ -195,7 +208,7 @@ async function getBattleView(userId, { isAdmin = false } = {}) {
       post_b: shapePost(posts[String(active.post_b)], canSeePremium),
       my_votes_a: myA,
       my_votes_b: myB,
-      free_votes_left: Math.max(0, settings.free_votes_per_battle - freeUsed),
+      free_votes_left: 0, // free voting is switched off
     };
   }
 
@@ -215,7 +228,8 @@ async function getBattleView(userId, { isAdmin = false } = {}) {
     enabled: settings.enabled,
     vote_cost_tokens: settings.vote_cost_tokens,
     winner_xp: settings.winner_xp,
-    free_votes_per_battle: settings.free_votes_per_battle,
+    underdog_bonus_xp: settings.underdog_bonus_xp,
+    free_votes_per_battle: 0,
     balance,
     packs,
     current,
@@ -241,15 +255,9 @@ async function castTokenVote({ battleId, userId, side, qty }) {
   return { ok: !!row.ok, reason: row.reason || null, balance: Number(row.new_balance) || 0, cost };
 }
 
-async function castFreeVote({ battleId, userId, side }) {
-  const settings = await getBattleSettings();
-  const { data, error } = await supabase.rpc('battle_cast_vote', {
-    p_battle: battleId, p_user: String(userId), p_side: side, p_weight: 1,
-    p_stars: 0, p_charge: null, p_kind: 'free', p_free_limit: settings.free_votes_per_battle,
-  });
-  if (error) throw error;
-  const row = data?.[0] || {};
-  return { counted: !!row.counted, reason: row.reason || null };
+// Free voting is switched off on purpose — only token votes count.
+async function castFreeVote() {
+  return { counted: false, reason: 'no_free_votes' };
 }
 
 // ── Admin ───────────────────────────────────────────────────────────────────
