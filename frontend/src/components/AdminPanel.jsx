@@ -25,6 +25,22 @@ import {
 // No polling: data loads once on open, and again only on explicit
 // user action (Refresh / Load more), to stay well within free-tier
 // request budgets.
+// Stops one broken section from blanking the whole admin panel.
+class SectionBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { err: null }; }
+  static getDerivedStateFromError(err) { return { err }; }
+  render() {
+    if (this.state.err) {
+      return (
+        <p className="text-red-400 text-xs bg-zinc-800/50 rounded-xl p-3">
+          {this.props.name} failed to load: {String(this.state.err?.message || this.state.err)}
+        </p>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function AdminPanel({ initData, onClose }) {
   const [stats, setStats]     = useState(null);
   const [posts, setPosts]     = useState([]);
@@ -125,7 +141,7 @@ export default function AdminPanel({ initData, onClose }) {
               <AdsSection initData={initData} />
 
               {/* Video Battles */}
-              <BattleSection initData={initData} />
+              <SectionBoundary name="Video Battles"><BattleSection initData={initData} /></SectionBoundary>
 
               {/* Gift Hunt settings */}
               <GiftHuntSection initData={initData} />
@@ -1447,7 +1463,9 @@ function BattleSection({ initData }) {
     <div className="flex flex-col gap-2 bg-zinc-800/50 rounded-xl p-3">
       <span className="text-gray-400 text-xs font-semibold uppercase">⚔️ Video Battles</span>
       {error && <p className="text-red-400 text-xs">{error}</p>}
-      {loading ? <p className="text-gray-500 text-xs">Loading...</p> : (
+      {loading ? <p className="text-gray-500 text-xs">Loading...</p> : !data ? (
+        <button onClick={() => { setLoading(true); setError(''); load(); }} className="self-start text-xs text-amber-400">Retry</button>
+      ) : (
         <>
           <div className="flex items-center justify-between bg-zinc-900 rounded-lg px-3 py-2.5">
             <span className="text-white text-sm">Battles on</span>
