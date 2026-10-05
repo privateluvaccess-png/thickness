@@ -1,8 +1,21 @@
 const { activateSubscription } = require('../subscriptions');
 const { recordMissionAction } = require('../missions');
 const PRODUCTS = require('../../config/products');
+const { fulfillTokenPayment } = require('../tokens');
 
-async function fulfillPayment(productKey, telegramId, ctx) {
+async function fulfillPayment(productKey, telegramId, ctx, payment) {
+  // Battle token pack (payload: tk_<tokenAmount>_<telegramId>)
+  if (productKey.startsWith('tk_')) {
+    try {
+      const result = await fulfillTokenPayment(productKey, telegramId, payment);
+      if (result.credited) await ctx.reply(`✅ Tokens added! Your balance is now ${result.balance} 🪙. Head to the Battle tab to vote. ⚔️`);
+    } catch (err) {
+      console.error('[payments] token credit failed:', err.message);
+      await ctx.reply('⚠️ We received your payment but could not add the tokens. Please contact support.');
+    }
+    return;
+  }
+
   const product = Object.values(PRODUCTS).find(p => p.key === productKey);
   if (!product) return;
 
