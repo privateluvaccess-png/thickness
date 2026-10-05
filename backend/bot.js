@@ -143,7 +143,7 @@ bot.on('message', async (ctx) => {
   const telegramId = parts[parts.length - 1];
   const productKey = parts.slice(0, -1).join('_');
 
-  await fulfillPayment(productKey, telegramId, ctx);
+  await fulfillPayment(productKey, telegramId, ctx, payment);
 });
 
 module.exports = bot;
