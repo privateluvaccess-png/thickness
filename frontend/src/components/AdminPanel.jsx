@@ -1481,7 +1481,7 @@ function BattleSection({ initData }) {
           {[
             { key: 'vote_cost_tokens', label: 'Tokens per vote', hint: 'What 1 vote costs a user', min: 1 },
             { key: 'round_hours', label: 'Round length (hours)', hint: '48 = 2 days', min: 1 },
-            { key: 'free_votes_per_battle', label: 'Free votes per user', hint: '0 = every vote is paid', min: 0 },
+            { key: 'underdog_bonus_xp', label: 'Underdog bonus XP', hint: 'Extra XP for backing the winner while it was behind (0 = off)', min: 0 },
             { key: 'winner_xp', label: 'XP for backing the winner', hint: 'Paid out when the round ends', min: 1 },
           ].map(f => (
             <div key={f.key} className="flex items-center justify-between bg-zinc-900 rounded-lg px-3 py-2.5">
