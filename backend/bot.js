@@ -4,6 +4,7 @@ const { syncPost, deletePost } = require('./modules/posts');
 const { setActiveLink } = require('./modules/link');
 const { fulfillPayment } = require('./modules/payments');
 const { broadcastNewPost } = require('./modules/broadcast');
+const { autoPostVideoToX } = require('./modules/twitter');
 const { FREE_CHANNEL_ID, PREMIUM_CHANNEL_ID } = require('./config/channels');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -108,6 +109,12 @@ bot.on('channel_post', async (ctx) => {
   if (post) {
     broadcastNewPost(bot, post, tier).catch((err) =>
       console.error('broadcastNewPost error:', err.message)
+    );
+
+    // Auto-post free videos to X (no-op unless X_AUTOPOST_ENABLED=true).
+    // Fire-and-forget: it can never block or break the upload flow.
+    autoPostVideoToX(post, tier).catch((err) =>
+      console.error('autoPostVideoToX error:', err.message)
     );
   }
 });
